@@ -19,7 +19,7 @@ export type Upgrade = 'carriage' | 'line' | 'bridge';
 export const UPGRADES: readonly Upgrade[] = ['carriage', 'line', 'bridge'];
 
 export interface Game {
-  cfg: Config; rng: Rng; t: number; status: Status;
+  cfg: Config; rng: Rng; placeRng: Rng; t: number; status: Status;
   stations: Station[]; lines: Line[]; events: GameEvent[];
   warning: GameEvent | null; eventTimer: number; stationTimer: number;
   delivered: number; upgradesGiven: number; upgradeOffer: boolean;
@@ -29,7 +29,7 @@ export interface Game {
 
 export function createGame(seed = Date.now(), cfg: Config = CONFIG): Game {
   const g: Game = {
-    cfg, rng: makeRng(seed), t: 0, status: 'playing', stations: [], lines: [], events: [],
+    cfg, rng: makeRng(seed), placeRng: makeRng(seed ^ 0x9e3779b9), t: 0, status: 'playing', stations: [], lines: [], events: [],
     warning: null, eventTimer: cfg.eventInterval.start, stationTimer: cfg.stationSpawn.start,
     delivered: 0, upgradesGiven: 0, upgradeOffer: false,
     maxLines: cfg.startLines, carriages: 0, bridges: cfg.startBridges, bridged: new Set(), eventLog: [], nextId: 0, signals: [],
@@ -55,7 +55,7 @@ function freeSpot(g: Game, ignore?: Station): { x: number; y: number } | null {
   const ok = (x: number, y: number) => stationSpotOk(g.cfg, x, y) && !pointFlooded(g, x, y)
     && g.stations.every(s => s === ignore || dist(s.x, s.y, x, y) > minStationGap);
   for (let k = 0; k < g.cfg.stationSpawnAttempts; k++) {
-    const x = range(g, m, W - m), y = range(g, 130, H - m);
+    const x = m + g.placeRng() * (W - 2 * m), y = 130 + g.placeRng() * (H - m - 130);
     if (ok(x, y)) return { x, y };
   }
   // 确定性兜底：按网格扫描第一个合法位置

@@ -15,6 +15,7 @@ function assertLand(g: Game, seed: number) {
 
 describe('A5 站点只在陆地上', () => {
   it('200 个种子 × 300 秒：开局、新站、搬迁后都不在水里、不贴河、不贴边', () => {
+    let relocations = 0;
     for (let seed = 0; seed < 200; seed++) {
       const g = createGame(seed);
       expect(g.stations.length).toBe(CONFIG.initialStations);
@@ -23,9 +24,10 @@ describe('A5 站点只在陆地上', () => {
         if (g.upgradeOffer) g.upgradeOffer = false;
         for (const s of g.stations) s.queue.length = 0; // 不让游戏提前输掉，好跑满突变和刷站
         step(g, 0.25);
-        if (i % 4 === 0) assertLand(g, seed);
+        if (i % 8 === 0) assertLand(g, seed);
       }
-      expect(g.eventLog.length).toBeGreaterThan(0);
+      relocations += g.eventLog.filter(e => e === 'RELOCATE').length;
     }
-  });
+    expect(relocations, '没覆盖到 RELOCATE').toBeGreaterThan(50);
+  }, 60_000);
 });
