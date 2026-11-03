@@ -1,0 +1,116 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Metro Chaos</title><style>html,body{margin:0;height:100%;background:#111;overflow:hidden;touch-action:none}canvas{display:block;margin:auto;background:#f4f1ea}</style></head>
+<body><canvas id="c"></canvas><script>
+const W=390,H=844,FAST=/fast=1/.test(location.search);
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+function fit(){const s=Math.min(innerWidth/W,innerHeight/H),d=devicePixelRatio||1;cv.style.width=W*s+'px';cv.style.height=H*s+'px';cv.width=W*d;cv.height=H*d;ctx.setTransform(d,0,0,d,0,0)}
+addEventListener('resize',fit);fit();
+const SH=['circle','triangle','square'],COL=['#e3342f','#3490dc','#38a169'];
+const EV_INT=FAST?8:30,WARN=5,R=13;
+let G;
+function reset(){G={st:[],lines:[],trains:[],pops:[],score:0,t:0,spawnT:0,evT:EV_INT,warn:null,ev:[],flash:0,over:false,drag:null,nid:0};
+ for(let i=0;i<3;i++)addStation(SH[i]);}
+function rnd(a,b){return a+Math.random()*(b-a)}
+function addStation(shape){for(let k=0;k<200;k++){const x=rnd(40,W-40),y=rnd(110,H-50);
+ if(G.st.every(s=>Math.hypot(s.x-x,s.y-y)>70)){const s={id:G.nid++,x,y,tx:x,ty:y,shape:shape||SH[Math.random()<.6?0:1+(Math.random()*2|0)],q:[],over:0,rush:0};G.st.push(s);return s}}}
+const byId=id=>G.st.find(s=>s.id==id);
+const flooded=s=>G.ev.some(e=>e.type=='FLOOD'&&Math.hypot(s.x-e.x,s.y-e.y)<e.r);
+function spawnPassenger(s){if(flooded(s))return;const others=[...new Set(G.st.map(o=>o.shape))].filter(h=>h!=s.shape);if(others.length)s.q.push(others[Math.random()*others.length|0])}
+// ---- events
+function pickEvent(){const t=['FLOOD','RELOCATE','RUSH'][Math.random()*3|0];
+ if(t=='FLOOD'){const s=G.st[Math.random()*G.st.length|0];return{type:t,x:s.x+rnd(-30,30),y:s.y+rnd(-30,30),r:95,dur:20,label:'🌊 洪水 FLOOD'}}
+ if(t=='RELOCATE'){return{type:t,sid:G.st[Math.random()*G.st.length|0].id,dur:0,label:'🏗 站点搬迁 RELOCATE'}}
+ return{type:t,sid:G.st[Math.random()*G.st.length|0].id,dur:15,label:'👥 客流暴增 RUSH'}}
+function startEvent(e){G.flash=1;
+ if(e.type=='RELOCATE'){const s=byId(e.sid);for(let k=0;k<200;k++){const x=rnd(40,W-40),y=rnd(110,H-50);if(G.st.every(o=>o==s||Math.hypot(o.x-x,o.y-y)>70)){s.tx=x;s.ty=y;break}}}
+ else{if(e.type=='RUSH')byId(e.sid).rush=1;e.left=e.dur;G.ev.push(e)}}
+// ---- lines/trains
+function lineOf(s){return G.lines.filter(l=>l.stops.includes(s.id))}
+function connect(a,b){if(a==b)return;
+ let l=G.lines.find(l=>l.stops[l.stops.length-1]==a.id&&!l.stops.includes(b.id));
+ if(l){l.stops.push(b.id);return}
+ l=G.lines.find(l=>l.stops[0]==a.id&&!l.stops.includes(b.id));
+ if(l){l.stops.unshift(b.id);l.trains.forEach(t=>t.i++);return}
+ if(G.lines.length>=3)return pop(a.x,a.y-24,'最多3条线','#999');
+ l={color:COL[G.lines.length],stops:[a.id,b.id],trains:[]};G.lines.push(l);
+ l.trains.push({i:0,f:0,dir:1,cargo:[],wait:0.5});}
+function pop(x,y,t,c){G.pops.push({x,y,t,c:c||'#222',a:1})}
+const ptFlooded=(x,y)=>G.ev.some(e=>e.type=='FLOOD'&&Math.hypot(x-e.x,y-e.y)<e.r);
+function segFlooded(a,b){return G.ev.some(e=>{if(e.type!='FLOOD')return false;for(let k=0;k<=10;k++){const x=a.x+(b.x-a.x)*k/10,y=a.y+(b.y-a.y)*k/10;if(Math.hypot(x-e.x,y-e.y)<e.r)return true}return false})}
+function stepTrain(l,t,dt){const S=l.stops.map(byId);if(S.length<2)return;
+ if(t.i>=S.length-1){t.i=S.length-2;t.f=1}
+ if(t.wait>0){t.wait-=dt;return}
+ const a=S[t.i],b=S[t.i+1];
+ const len=Math.hypot(b.x-a.x,b.y-a.y)||1,nf=t.f+t.dir*130*dt/len;
+ const inF=f=>ptFlooded(a.x+(b.x-a.x)*f,a.y+(b.y-a.y)*f);
+ if(inF(nf+t.dir*14/len)&&!inF(t.f)){t.dir*=-1;t.bounce=(t.bounce||0)+1;t.wait=0.3;return}
+ t.f=nf;
+ if(t.f>=1||t.f<=0){let at;
+  if(t.f>=1){t.f=1;at=t.i+1}else{t.f=0;at=t.i}
+  arrive(l,t,S[at],S);
+  if(t.dir>0){if(at>=S.length-1)t.dir=-1;else{t.i=at;t.f=0}}
+  else{if(at<=0)t.dir=1;else{t.i=at-1;t.f=1}}
+  t.wait=0.4}}
+function arrive(l,t,s,S){if(flooded(s))return;
+ const before=t.cargo.length;t.cargo=t.cargo.filter(p=>p!=s.shape);const n=before-t.cargo.length;
+ if(n){G.score+=n;pop(s.x,s.y-22,'+'+n,'#2a2')}
+ const reach=new Set(S.filter(o=>o!=s).map(o=>o.shape));
+ s.q=s.q.filter(p=>{if(t.cargo.length<6&&reach.has(p)){t.cargo.push(p);return false}return true})}
+function trainPos(l,t){const S=l.stops.map(byId);const a=S[t.i],b=S[Math.min(t.i+1,S.length-1)];return{x:a.x+(b.x-a.x)*t.f,y:a.y+(b.y-a.y)*t.f,ang:Math.atan2(b.y-a.y,b.x-a.x)}}
+// ---- update
+function update(dt){if(G.over)return;G.t+=dt;
+ G.spawnT-=dt;if(G.spawnT<=0&&G.st.length<14){addStation();G.spawnT=FAST?6:Math.max(8,14-G.t/30)}
+ const rate=0.25+G.t/400;
+ for(const s of G.st){s.x+=(s.tx-s.x)*Math.min(1,dt*4);s.y+=(s.ty-s.y)*Math.min(1,dt*4);
+  if(Math.random()<rate*dt*(s.rush?3:1))spawnPassenger(s);
+  if(flooded(s)){}else if(s.q.length>6){s.over+=dt;if(s.over>=10){G.over=true;G.flash=1}}else s.over=Math.max(0,s.over-dt*2)}
+ for(const l of G.lines)for(const t of l.trains)stepTrain(l,t,dt);
+ G.evT-=dt;if(!G.warn&&G.evT<=WARN){G.warn=pickEvent()}
+ if(G.evT<=0){startEvent(G.warn);G.warn=null;G.evT=EV_INT}
+ for(const e of G.ev){e.left-=dt;if(e.left<=0&&e.type=='RUSH'){const s=byId(e.sid);if(s)s.rush=0}}
+ G.ev=G.ev.filter(e=>e.left>0);
+ G.flash=Math.max(0,G.flash-dt*1.5);
+ for(const p of G.pops){p.y-=20*dt;p.a-=dt*.8}G.pops=G.pops.filter(p=>p.a>0)}
+// ---- draw
+function shape(x,y,sh,r,fill,stroke,lw){ctx.beginPath();
+ if(sh=='circle')ctx.arc(x,y,r,0,7);else if(sh=='square')ctx.rect(x-r*.85,y-r*.85,r*1.7,r*1.7);
+ else{ctx.moveTo(x,y-r*1.1);ctx.lineTo(x+r,y+r*.75);ctx.lineTo(x-r,y+r*.75);ctx.closePath()}
+ if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw||3;ctx.stroke()}}
+function draw(){ctx.fillStyle='#f4f1ea';ctx.fillRect(0,0,W,H);
+ for(const e of G.ev)if(e.type=='FLOOD'){ctx.fillStyle='rgba(60,140,230,.28)';ctx.beginPath();ctx.arc(e.x,e.y,e.r,0,7);ctx.fill();ctx.strokeStyle='rgba(60,140,230,.7)';ctx.setLineDash([6,6]);ctx.lineWidth=2;ctx.stroke();ctx.setLineDash([])}
+ if(G.warn&&G.warn.type=='FLOOD'){ctx.strokeStyle='rgba(60,140,230,'+(.4+.4*Math.sin(G.t*12))+')';ctx.lineWidth=3;ctx.setLineDash([4,8]);ctx.beginPath();ctx.arc(G.warn.x,G.warn.y,G.warn.r,0,7);ctx.stroke();ctx.setLineDash([])}
+ ctx.lineCap=ctx.lineJoin='round';
+ for(const l of G.lines){const S=l.stops.map(byId);for(let i=0;i<S.length-1;i++){const br=segFlooded(S[i],S[i+1]);ctx.strokeStyle=l.color;ctx.globalAlpha=br?.35:1;ctx.lineWidth=7;br&&ctx.setLineDash([8,8]);ctx.beginPath();ctx.moveTo(S[i].x,S[i].y);ctx.lineTo(S[i+1].x,S[i+1].y);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1}}
+ if(G.drag){ctx.strokeStyle=G.drag.bad?'rgba(230,40,40,.8)':'rgba(0,0,0,.35)';ctx.lineWidth=5;ctx.setLineDash([6,6]);ctx.beginPath();ctx.moveTo(G.drag.s.x,G.drag.s.y);ctx.lineTo(G.drag.x,G.drag.y);ctx.stroke();ctx.setLineDash([])}
+ for(const l of G.lines)for(const t of l.trains){const p=trainPos(l,t);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.ang);ctx.fillStyle=l.color;ctx.fillRect(-14,-8,28,16);
+  t.cargo.forEach((c,k)=>shape(-9+(k%3)*9,-3.5+(k/3|0)*7,c,2.6,'#fff'));ctx.restore()}
+ for(const s of G.st){const off=flooded(s);
+  if(s.rush){ctx.fillStyle='rgba(255,170,0,'+(.25+.15*Math.sin(G.t*8))+')';ctx.beginPath();ctx.arc(s.x,s.y,26,0,7);ctx.fill()}
+  if(G.warn&&G.warn.sid==s.id){ctx.strokeStyle='#f80';ctx.lineWidth=2;ctx.beginPath();ctx.arc(s.x,s.y,22+4*Math.sin(G.t*12),0,7);ctx.stroke()}
+  if(s.over>0){ctx.strokeStyle=off?'#5b8fd1':'#e33';ctx.lineWidth=5;ctx.beginPath();ctx.arc(s.x,s.y,21,-Math.PI/2,-Math.PI/2+Math.PI*2*s.over/10);ctx.stroke()}
+  shape(s.x,s.y,s.shape,R,off?'#cfe0f5':'#fff',off?'#7aa':'#222',3);
+  if(off){ctx.fillStyle='rgba(60,140,230,.35)';ctx.beginPath();ctx.arc(s.x,s.y,20,0,7);ctx.fill();ctx.fillStyle='#1d4f91';ctx.fillRect(s.x-5,s.y-6,3,12);ctx.fillRect(s.x+2,s.y-6,3,12)}
+  s.q.forEach((p,k)=>shape(s.x+18+(k%6)*9,s.y-8+(k/6|0)*9,p,3.5,off?'#5b8fd1':s.q.length>6?'#e33':'#444'))}
+ for(const p of G.pops){ctx.globalAlpha=Math.max(0,p.a);ctx.fillStyle=p.c;ctx.font='bold 16px sans-serif';ctx.textAlign='center';ctx.fillText(p.t,p.x,p.y);ctx.globalAlpha=1}
+ // HUD
+ ctx.fillStyle='rgba(255,255,255,.9)';ctx.fillRect(0,0,W,64);ctx.fillStyle='#222';ctx.textAlign='left';ctx.font='bold 22px sans-serif';ctx.fillText('🚇 '+G.score,16,40);
+ ctx.textAlign='right';ctx.font='14px sans-serif';ctx.fillText('下个事件 '+Math.ceil(G.evT)+'s',W-16,28);
+ ctx.fillText('线路 '+G.lines.length+'/3',W-16,48);
+ COL.forEach((c,i)=>{ctx.fillStyle=i<G.lines.length?c:'#ddd';ctx.beginPath();ctx.arc(150+i*22,34,7,0,7);ctx.fill()});
+ const banner=G.warn?('⚠ '+G.warn.label+' '+Math.ceil(G.evT)+'s'):(G.ev[0]?G.ev[0].label+' '+Math.ceil(G.ev[0].left)+'s':null);
+ if(banner){ctx.fillStyle=G.warn?'rgba(255,140,0,.92)':'rgba(40,90,180,.85)';ctx.fillRect(0,64,W,34);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='bold 16px sans-serif';ctx.fillText(banner,W/2,87)}
+ if(G.flash>0){ctx.fillStyle='rgba(255,255,255,'+G.flash*.6+')';ctx.fillRect(0,0,W,H)}
+ if(G.over){ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='bold 34px sans-serif';ctx.fillText('站点瘫痪',W/2,H/2-20);ctx.font='20px sans-serif';ctx.fillText('送达 '+G.score+' 人 · 点击重来',W/2,H/2+20)}
+ else if(G.t<6&&!G.lines.length){ctx.fillStyle='#666';ctx.textAlign='center';ctx.font='15px sans-serif';ctx.fillText('从一个站拖到另一个站来连线',W/2,H-24)}}
+// ---- input
+function pt(e){const r=cv.getBoundingClientRect(),p=e.touches?e.touches[0]||e.changedTouches[0]:e;return{x:(p.clientX-r.left)*W/r.width,y:(p.clientY-r.top)*H/r.height}}
+const hit=p=>G.st.find(s=>Math.hypot(s.x-p.x,s.y-p.y)<26);
+function down(e){e.preventDefault();if(G.over){reset();return}const p=pt(e),s=hit(p);if(s)G.drag={s,x:p.x,y:p.y}}
+function move(e){if(!G.drag)return;e.preventDefault();const p=pt(e);G.drag.x=p.x;G.drag.y=p.y;const s=hit(p);G.drag.bad=segFlooded(G.drag.s,p);if(s&&s!=G.drag.s){if(G.drag.bad||flooded(s)){if(!G.drag.warned)pop(p.x,p.y-20,'不能穿过洪水','#e33');G.drag.warned=1;return}connect(G.drag.s,s);G.drag.s=s}}
+function up(){G.drag=null}
+cv.addEventListener('mousedown',down);addEventListener('mousemove',move);addEventListener('mouseup',up);
+cv.addEventListener('touchstart',down,{passive:false});cv.addEventListener('touchmove',move,{passive:false});cv.addEventListener('touchend',up);
+reset();let last=performance.now();
+(function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;update(dt);draw();requestAnimationFrame(loop)})(last);
+window.__G=()=>G;
+</script></body></html>
