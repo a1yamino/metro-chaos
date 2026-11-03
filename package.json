@@ -8,6 +8,7 @@
     "lint": "eslint src tests",
     "test": "vitest run",
     "bench": "tsx scripts/bench.ts",
+    "soak": "tsx scripts/soak.ts",
     "budget": "node scripts/budget.mjs",
     "check": "npm run lint && npm test && npm run build && npm run budget && npm run bench"
   },
