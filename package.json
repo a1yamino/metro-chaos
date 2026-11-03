@@ -1,0 +1,24 @@
+{
+  "name": "metro-chaos",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "lint": "eslint src tests",
+    "test": "vitest run",
+    "bench": "tsx scripts/bench.ts",
+    "budget": "node scripts/budget.mjs",
+    "check": "npm run lint && npm test && npm run build && npm run budget && npm run bench"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.14.0",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
+  }
+}
