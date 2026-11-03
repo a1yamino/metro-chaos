@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
-import { addCarriage, connect, createGame, step, type Game, type Shape } from '../src/sim';
+import { addCarriage, connect, createGame, eventInterval, step, takeUpgrade, type Game, type Shape } from '../src/sim';
 
 const run = (g: Game, seconds: number, dt = 1 / 60) => { for (let t = 0; t < seconds && g.status === 'playing'; t += dt) step(g, dt); };
 const crowd = (n: number): Shape[] => Array.from({ length: n }, () => 'triangle');
 
 describe('第一关规则', () => {
-  it('送达达到目标即过关', () => {
+  it('无尽模式：送多少人都不会结束', () => {
     const g = createGame(1);
-    g.delivered = CONFIG.goal;
+    g.delivered = 1e6;
     step(g, 0.016);
-    expect(g.status).toBe('won');
+    expect(g.status).toBe('playing');
+  });
+
+  it('突变间隔随时间缩短，但不低于下限', () => {
+    const g = createGame(1);
+    expect(eventInterval(g)).toBe(CONFIG.eventInterval.start);
+    g.t = 3600;
+    expect(eventInterval(g)).toBe(CONFIG.eventInterval.min);
   });
 
   it('站点拥挤持续 crowdFailSeconds 秒才失败', () => {
@@ -51,16 +58,29 @@ describe('第一关规则', () => {
     expect(connect(g, a, b)).toBe('flooded');
   });
 
-  it('第 60、120 秒各奖励一节车厢，加到线上增加载客', () => {
+  it('每 60 秒给一次三选一升级：车厢、新线、桥', () => {
     const g = createGame(4);
     connect(g, g.stations[0], g.stations[1]);
     g.eventTimer = 1e9;
-    g.stations.forEach(s => (s.queue = []));
+    for (let t = 0; t < 61; t += 0.1) { step(g, 0.1); g.stations.forEach(s => (s.queue = [])); }
+    expect(g.upgradeOffer).toBe(true);
     const cap = g.lines[0].train.capacity;
-    for (let t = 0; t < 121; t += 0.1) { step(g, 0.1); g.stations.forEach(s => (s.queue = [])); }
-    expect(g.rewardsGiven).toBe(2);
+    expect(takeUpgrade(g, 'carriage')).toBe(true);
+    expect(g.upgradeOffer).toBe(false);
     expect(addCarriage(g, 0)).toBe(true);
     expect(g.lines[0].train.capacity).toBe(cap + CONFIG.carriageCapacity);
+    g.upgradeOffer = true; takeUpgrade(g, 'line');
+    expect(g.maxLines).toBe(CONFIG.startLines + 1);
+  });
+
+  it('桥：消耗一座桥后可以把线画过洪水，且这段不再被切断', () => {
+    const g = createGame(5);
+    const [a, b] = g.stations;
+    g.events.push({ type: 'FLOOD', x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, r: 10, left: 1e9 });
+    expect(connect(g, a, b)).toBe('flooded');
+    g.bridges = 1;
+    expect(connect(g, a, b)).toBe('ok');
+    expect(g.bridges).toBe(0);
   });
 
   it('前期客流放缓：只连一条线也能撑过 40 秒（原型约 22 秒失败）', () => {

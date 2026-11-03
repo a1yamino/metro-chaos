@@ -1,7 +1,7 @@
 import { CONFIG } from './config';
 import { PALETTE as P } from './art/palette';
-import { playClear, playDeliver, playWarning, unlockAudio } from './audio/sfx';
-import { addCarriage, connect, createGame, drainSignals, segmentFlooded, stationById, stationFlooded, step, type Game, type Shape, type Station } from './sim';
+import { playDeliver, playGameOver, playUpgrade, playWarning, unlockAudio } from './audio/sfx';
+import { UPGRADES, addCarriage, connect, takeUpgrade, type Upgrade, createGame, drainSignals, segmentFlooded, stationById, stationFlooded, step, type Game, type Shape, type Station } from './sim';
 
 const { width: W, height: H } = CONFIG;
 const cv = document.getElementById('c') as HTMLCanvasElement;
@@ -21,9 +21,17 @@ let flash = 0;
 let drag: { s: Station; x: number; y: number; bad: boolean; warned: boolean } | null = null;
 let placingCarriage = false;
 const pop = (x: number, y: number, text: string, color: string = P.ink) => pops.push({ x, y, text, color, a: 1 });
+const lineColor = (id: number) => P.lines[id % P.lines.length];
+const BEST_KEY = 'metro-chaos:best';
+const readBest = () => Number(localStorage.getItem(BEST_KEY) ?? 0);
+let best = readBest();
+let newBest = false;
+const UP_LABEL: Record<Upgrade, string> = { carriage: '🚃 车厢', line: '➕ 新线', bridge: '🌉 桥' };
+const UP_DESC: Record<Upgrade, string> = { carriage: '一条线载客 +6', line: '可多建一条线', bridge: '一段线可穿过洪水' };
+const upgradeBtn = (i: number) => ({ x: 30, y: 300 + i * 90, w: W - 60, h: 74 });
 const EV_LABEL = { FLOOD: '🌊 洪水', RELOCATE: '🏗 站点搬迁', RUSH: '👥 客流暴增' } as const;
 
-function restart() { g = createGame(Date.now()); pops = []; drag = null; placingCarriage = false; }
+function restart() { g = createGame(Date.now()); pops = []; drag = null; placingCarriage = false; newBest = false; }
 
 function shape(x: number, y: number, sh: Shape, r: number, fill?: string, stroke?: string, lw = 3) {
   ctx.beginPath();
@@ -43,8 +51,8 @@ function tutorialHint(): string | null {
   if (g.t > CONFIG.tutorialSeconds) return null;
   if (!g.lines.length) return '从一个站拖到另一个站，连出第一条线';
   if (g.delivered === 0) return '列车把乘客送到同形状的站就算送达';
-  if (g.t < 10) return '站上乘客超过 6 人会变红，红满 10 秒就输';
-  return `每 ${CONFIG.eventInterval} 秒有一次突变，提前 ${CONFIG.eventWarning} 秒预警`;
+  if (g.t < 10) return '站上乘客超过 6 人会变红，红满 10 秒结束';
+  return `每隔一段时间有突变，提前 ${CONFIG.eventWarning} 秒预警`;
 }
 
 function draw() {
@@ -62,7 +70,7 @@ function draw() {
     const S = l.stops.map(id => stationById(g, id)!);
     for (let i = 0; i < S.length - 1; i++) {
       const broken = segmentFlooded(g, S[i], S[i + 1]);
-      ctx.strokeStyle = P.lines[l.id]; ctx.globalAlpha = broken ? 0.35 : 1; ctx.lineWidth = placingCarriage ? 11 : 7;
+      ctx.strokeStyle = lineColor(l.id); ctx.globalAlpha = broken ? 0.35 : 1; ctx.lineWidth = placingCarriage ? 11 : 7;
       if (broken) ctx.setLineDash([8, 8]);
       ctx.beginPath(); ctx.moveTo(S[i].x, S[i].y); ctx.lineTo(S[i + 1].x, S[i + 1].y); ctx.stroke();
       ctx.setLineDash([]); ctx.globalAlpha = 1;
@@ -77,7 +85,7 @@ function draw() {
     const a = S[t.seg], b = S[Math.min(t.seg + 1, S.length - 1)];
     const cars = t.capacity / CONFIG.carriageCapacity, len = 28 + (cars - 1) * 16;
     ctx.save(); ctx.translate(a.x + (b.x - a.x) * t.f, a.y + (b.y - a.y) * t.f); ctx.rotate(Math.atan2(b.y - a.y, b.x - a.x));
-    ctx.fillStyle = P.lines[l.id]; ctx.fillRect(-len / 2, -8, len, 16);
+    ctx.fillStyle = lineColor(l.id); ctx.fillRect(-len / 2, -8, len, 16);
     t.cargo.forEach((c, k) => shape(-len / 2 + 5 + (k % (3 * cars)) * 9 * (len / (27 * cars)) , -3.5 + Math.floor(k / (3 * cars)) * 7, c, 2.6, P.white));
     ctx.restore();
   }
@@ -96,32 +104,46 @@ function draw() {
 
   // HUD
   ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillRect(0, 0, W, 64);
-  text(`🚇 ${g.delivered}/${CONFIG.goal}`, 16, 40, 'bold 22px sans-serif', P.ink, 'left');
+  text(`🚇 ${g.delivered}`, 16, 40, 'bold 22px sans-serif', P.ink, 'left');
+  text(`最高 ${best} · ${fmtTime(g.t)}${g.bridges ? ` · 🌉${g.bridges}` : ''}`, 16, 58, '12px sans-serif', P.muted, 'left');
   text(`下个突变 ${Math.ceil(g.eventTimer)}s`, W - 16, 28, '14px sans-serif', P.ink, 'right');
-  text(`线路 ${g.lines.length}/${CONFIG.maxLines}`, W - 16, 48, '14px sans-serif', P.ink, 'right');
-  ctx.fillStyle = '#e5e5e5'; ctx.fillRect(16, 52, 150, 5);
-  ctx.fillStyle = P.good; ctx.fillRect(16, 52, 150 * Math.min(1, g.delivered / CONFIG.goal), 5);
+  text(`线路 ${g.lines.length}/${g.maxLines}`, W - 16, 48, '14px sans-serif', P.ink, 'right');
   const active = g.events[0];
   const banner = w ? `⚠ ${EV_LABEL[w.type]} ${Math.ceil(g.eventTimer)}s` : active ? `${EV_LABEL[active.type]} ${Math.ceil(active.left)}s` : null;
   if (banner) { ctx.fillStyle = w ? P.warning : P.floodDeep; ctx.fillRect(0, 64, W, 34); text(banner, W / 2, 87, 'bold 16px sans-serif', P.white); }
 
-  if (g.pendingCarriages > 0 && g.status === 'playing') {
+  if (g.carriages > 0 && g.status === 'playing') {
     const b = CARRIAGE_BTN;
     ctx.fillStyle = placingCarriage ? P.warning : P.ink; ctx.fillRect(b.x, b.y, b.w, b.h);
-    text(placingCarriage ? '点一条线' : `+车厢 ×${g.pendingCarriages}`, b.x + b.w / 2, b.y + 28, 'bold 15px sans-serif', P.white);
+    text(placingCarriage ? '点一条线' : `+车厢 ×${g.carriages}`, b.x + b.w / 2, b.y + 28, 'bold 15px sans-serif', P.white);
   }
   const hint = g.status === 'playing' ? tutorialHint() : null;
   if (hint) { ctx.fillStyle = 'rgba(34,34,34,0.85)'; ctx.fillRect(16, H - 120, W - 32, 40); text(hint, W / 2, H - 94, '15px sans-serif', P.white); }
 
   if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash * 0.6})`; ctx.fillRect(0, 0, W, H); }
+  if (g.upgradeOffer && g.status === 'playing') drawUpgrades();
   if (g.status !== 'playing') drawResults();
+}
+
+const fmtTime = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+const upgradeOk = (u: Upgrade) => u !== 'line' || g.maxLines < CONFIG.maxLinesCap;
+function drawUpgrades() {
+  ctx.fillStyle = P.overlay; ctx.fillRect(0, 0, W, H);
+  text('选一个升级', W / 2, 260, 'bold 26px sans-serif', P.white);
+  UPGRADES.forEach((u, i) => {
+    const b = upgradeBtn(i), ok = upgradeOk(u);
+    ctx.globalAlpha = ok ? 1 : 0.4; ctx.fillStyle = P.white; ctx.fillRect(b.x, b.y, b.w, b.h);
+    text(UP_LABEL[u], b.x + 20, b.y + 32, 'bold 20px sans-serif', P.ink, 'left');
+    text(ok ? UP_DESC[u] : '线路已达上限', b.x + 20, b.y + 56, '14px sans-serif', P.muted, 'left');
+    ctx.globalAlpha = 1;
+  });
 }
 
 function drawResults() {
   ctx.fillStyle = P.overlay; ctx.fillRect(0, 0, W, H);
-  const won = g.status === 'won';
-  text(won ? '第一关通过！' : '站点瘫痪', W / 2, H / 2 - 110, 'bold 34px sans-serif', P.white);
-  text(`送达 ${g.delivered} 人 · 用时 ${Math.floor(g.t / 60)}:${String(Math.floor(g.t % 60)).padStart(2, '0')}`, W / 2, H / 2 - 60, '20px sans-serif', P.white);
+  text('站点瘫痪', W / 2, H / 2 - 150, 'bold 34px sans-serif', P.white);
+  text(`${g.delivered} 分`, W / 2, H / 2 - 100, 'bold 30px sans-serif', P.white);
+  text(`存活 ${fmtTime(g.t)} · 最高 ${best}${newBest ? ' 🎉 新纪录' : ''}`, W / 2, H / 2 - 60, '18px sans-serif', P.white);
   const counts = g.eventLog.reduce<Record<string, number>>((m, e) => ((m[e] = (m[e] ?? 0) + 1), m), {});
   const evs = (Object.keys(EV_LABEL) as (keyof typeof EV_LABEL)[]).filter(k => counts[k]).map(k => `${EV_LABEL[k]} ×${counts[k]}`);
   text('经历的突变', W / 2, H / 2 - 16, '16px sans-serif', '#ccc');
@@ -131,13 +153,13 @@ function drawResults() {
 }
 
 function update(dt: number) {
-  step(g, dt);
+  if (!g.upgradeOffer) step(g, dt); // 选升级时暂停
   for (const s of drainSignals(g)) {
     if (s === 'deliver') playDeliver();
     else if (s === 'warning') playWarning();
-    else if (s === 'won') playClear();
-    else if (s === 'eventStart' || s === 'lost') flash = 1;
-    else if (s === 'carriage') pop(W / 2, H - 140, '获得 1 节车厢！', P.good);
+    else if (s === 'upgradeTaken') playUpgrade();
+    else if (s === 'eventStart') flash = 1;
+    else if (s === 'lost') { flash = 1; playGameOver(); if (g.delivered > best) { best = g.delivered; newBest = true; localStorage.setItem(BEST_KEY, String(best)); } }
   }
   flash = Math.max(0, flash - dt * 1.5);
   for (const p of pops) { p.y -= 20 * dt; p.a -= dt * 0.8; }
@@ -171,7 +193,8 @@ function down(e: MouseEvent | TouchEvent) {
   e.preventDefault(); unlockAudio();
   const p = pt(e);
   if (g.status !== 'playing') { if (inBtn(p, { x: W / 2 - 80, y: H / 2 + 110, w: 160, h: 50 })) restart(); return; }
-  if (g.pendingCarriages > 0 && inBtn(p, CARRIAGE_BTN)) { placingCarriage = !placingCarriage; return; }
+  if (g.upgradeOffer) { UPGRADES.forEach((u, i) => { if (inBtn(p, upgradeBtn(i)) && upgradeOk(u)) takeUpgrade(g, u); }); return; }
+  if (g.carriages > 0 && inBtn(p, CARRIAGE_BTN)) { placingCarriage = !placingCarriage; return; }
   if (placingCarriage) {
     const id = nearestLine(p);
     if (id !== null && addCarriage(g, id)) { pop(p.x, p.y - 20, '+车厢', P.good); placingCarriage = false; }
@@ -189,7 +212,7 @@ function move(e: MouseEvent | TouchEvent) {
   if (!s || s === drag.s) return;
   const r = connect(g, drag.s, s);
   if (r === 'ok') drag.s = s;
-  else if (!drag.warned) { drag.warned = true; pop(p.x, p.y - 20, r === 'flooded' ? '不能穿过洪水' : r === 'maxLines' ? `最多 ${CONFIG.maxLines} 条线` : '', P.danger); }
+  else if (!drag.warned) { drag.warned = true; pop(p.x, p.y - 20, r === 'flooded' ? '不能穿过洪水（需要桥）' : r === 'maxLines' ? `最多 ${g.maxLines} 条线` : '', P.danger); }
 }
 const up = () => { drag = null; };
 cv.addEventListener('mousedown', down); addEventListener('mousemove', move); addEventListener('mouseup', up);

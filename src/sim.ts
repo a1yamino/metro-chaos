@@ -12,22 +12,26 @@ export type GameEvent =
   | { type: 'FLOOD'; x: number; y: number; r: number; left: number }
   | { type: 'RELOCATE'; stationId: number; left: number }
   | { type: 'RUSH'; stationId: number; left: number };
-export type Status = 'playing' | 'won' | 'lost';
-export type SimSignal = 'deliver' | 'warning' | 'eventStart' | 'won' | 'lost' | 'carriage';
+export type Status = 'playing' | 'lost';
+export type SimSignal = 'deliver' | 'warning' | 'eventStart' | 'lost' | 'upgradeOffer' | 'upgradeTaken';
+export type Upgrade = 'carriage' | 'line' | 'bridge';
+export const UPGRADES: readonly Upgrade[] = ['carriage', 'line', 'bridge'];
 
 export interface Game {
   cfg: Config; rng: Rng; t: number; status: Status;
   stations: Station[]; lines: Line[]; events: GameEvent[];
   warning: GameEvent | null; eventTimer: number; stationTimer: number;
-  delivered: number; pendingCarriages: number; rewardsGiven: number;
+  delivered: number; upgradesGiven: number; upgradeOffer: boolean;
+  maxLines: number; carriages: number; bridges: number; bridged: Set<string>;
   eventLog: EventType[]; nextId: number; signals: SimSignal[];
 }
 
 export function createGame(seed = Date.now(), cfg: Config = CONFIG): Game {
   const g: Game = {
     cfg, rng: makeRng(seed), t: 0, status: 'playing', stations: [], lines: [], events: [],
-    warning: null, eventTimer: cfg.eventInterval, stationTimer: cfg.stationSpawn.start,
-    delivered: 0, pendingCarriages: 0, rewardsGiven: 0, eventLog: [], nextId: 0, signals: [],
+    warning: null, eventTimer: cfg.eventInterval.start, stationTimer: cfg.stationSpawn.start,
+    delivered: 0, upgradesGiven: 0, upgradeOffer: false,
+    maxLines: cfg.startLines, carriages: 0, bridges: cfg.startBridges, bridged: new Set(), eventLog: [], nextId: 0, signals: [],
   };
   for (let i = 0; i < cfg.initialStations; i++) addStation(g, SHAPES[i % SHAPES.length]);
   return g;
@@ -59,30 +63,55 @@ export function pointFlooded(g: Game, x: number, y: number): boolean {
   return g.events.some(e => e.type === 'FLOOD' && dist(x, y, e.x, e.y) < e.r);
 }
 export const stationFlooded = (g: Game, s: Station) => pointFlooded(g, s.x, s.y);
-export function segmentFlooded(g: Game, a: { x: number; y: number }, b: { x: number; y: number }): boolean {
+export const segKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
+export function segmentFlooded(g: Game, a: { x: number; y: number; id?: number }, b: { x: number; y: number; id?: number }): boolean {
+  if (a.id !== undefined && b.id !== undefined && g.bridged.has(segKey(a.id, b.id))) return false;
   for (let k = 0; k <= 10; k++) if (pointFlooded(g, a.x + (b.x - a.x) * k / 10, a.y + (b.y - a.y) * k / 10)) return true;
   return false;
 }
 
 export type ConnectResult = 'ok' | 'same' | 'flooded' | 'maxLines';
+/** 穿过洪水的连线会消耗一座桥；桥上的线段不再被洪水切断。 */
 export function connect(g: Game, a: Station, b: Station): ConnectResult {
   if (a === b) return 'same';
-  if (stationFlooded(g, a) || stationFlooded(g, b) || segmentFlooded(g, a, b)) return 'flooded';
+  if (stationFlooded(g, a) || stationFlooded(g, b)) return 'flooded';
+  const needsBridge = segmentFlooded(g, a, b);
+  if (needsBridge && g.bridges <= 0) return 'flooded';
+  const r = attach(g, a, b);
+  if (r === 'ok' && needsBridge) { g.bridges--; g.bridged.add(segKey(a.id, b.id)); }
+  return r;
+}
+function attach(g: Game, a: Station, b: Station): ConnectResult {
   const tail = g.lines.find(l => l.stops[l.stops.length - 1] === a.id && !l.stops.includes(b.id));
   if (tail) { tail.stops.push(b.id); return 'ok'; }
   const head = g.lines.find(l => l.stops[0] === a.id && !l.stops.includes(b.id));
   if (head) { head.stops.unshift(b.id); head.train.seg++; return 'ok'; }
-  if (g.lines.length >= g.cfg.maxLines) return 'maxLines';
+  if (g.lines.length >= g.maxLines) return 'maxLines';
   g.lines.push({ id: g.lines.length, stops: [a.id, b.id], train: { seg: 0, f: 0, dir: 1, cargo: [], capacity: g.cfg.carriageCapacity, wait: 0.5 } });
   return 'ok';
 }
 
+/** 领取三选一升级。车厢先存着，之后点一条线装上。 */
+export function takeUpgrade(g: Game, u: Upgrade): boolean {
+  if (!g.upgradeOffer) return false;
+  if (u === 'line' && g.maxLines >= g.cfg.maxLinesCap) return false;
+  if (u === 'carriage') g.carriages++;
+  else if (u === 'line') g.maxLines++;
+  else g.bridges++;
+  g.upgradeOffer = false;
+  g.signals.push('upgradeTaken');
+  return true;
+}
 export function addCarriage(g: Game, lineId: number): boolean {
   const l = g.lines[lineId];
-  if (!l || g.pendingCarriages <= 0) return false;
+  if (!l || g.carriages <= 0) return false;
   l.train.capacity += g.cfg.carriageCapacity;
-  g.pendingCarriages--;
+  g.carriages--;
   return true;
+}
+export function eventInterval(g: Game): number {
+  const e = g.cfg.eventInterval;
+  return Math.max(e.min, e.start - (g.t / 60) * e.shrinkPerMinute);
 }
 
 function spawnPassenger(g: Game, s: Station) {
@@ -138,7 +167,8 @@ function stepTrain(g: Game, l: Line, dt: number) {
   const a = S[t.seg], b = S[t.seg + 1];
   const len = dist(a.x, a.y, b.x, b.y) || 1;
   const nf = t.f + t.dir * g.cfg.trainSpeed * dt / len;
-  const inFlood = (f: number) => pointFlooded(g, a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f);
+  const bridged = g.bridged.has(segKey(a.id, b.id));
+  const inFlood = (f: number) => !bridged && pointFlooded(g, a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f);
   if (inFlood(nf + t.dir * 14 / len) && !inFlood(t.f)) { t.dir = t.dir === 1 ? -1 : 1; t.wait = 0.3; return; }
   t.f = nf;
   if (t.f >= 1 || t.f <= 0) {
@@ -167,8 +197,9 @@ export function step(g: Game, dt: number): void {
     addStation(g);
     g.stationTimer = Math.max(c.stationSpawn.min, c.stationSpawn.start - g.t / c.stationSpawn.ramp);
   }
-  while (g.rewardsGiven < c.carriageRewardsAt.length && g.t >= c.carriageRewardsAt[g.rewardsGiven]) {
-    g.rewardsGiven++; g.pendingCarriages++; g.signals.push('carriage');
+  if (g.t >= (g.upgradesGiven + 1) * c.upgradeInterval) {
+    g.upgradesGiven++;
+    if (!g.upgradeOffer) { g.upgradeOffer = true; g.signals.push('upgradeOffer'); }
   }
 
   const rate = passengerRate(g);
@@ -184,15 +215,14 @@ export function step(g: Game, dt: number): void {
 
   g.eventTimer -= dt;
   if (!g.warning && g.eventTimer <= c.eventWarning) { g.warning = pickEvent(g); g.signals.push('warning'); }
-  if (g.eventTimer <= 0 && g.warning) { startEvent(g, g.warning); g.warning = null; g.eventTimer = c.eventInterval; }
+  if (g.eventTimer <= 0 && g.warning) { startEvent(g, g.warning); g.warning = null; g.eventTimer = eventInterval(g); }
   for (const e of g.events) {
     e.left -= dt;
     if (e.left <= 0 && e.type === 'RUSH') { const s = stationById(g, e.stationId); if (s) s.rush = false; }
   }
   g.events = g.events.filter(e => e.left > 0);
 
-  if (g.delivered >= c.goal) { g.status = 'won'; g.signals.push('won'); }
-  else if (g.stations.some(s => s.crowdTime >= c.crowdFailSeconds)) { g.status = 'lost'; g.signals.push('lost'); }
+  if (g.stations.some(s => s.crowdTime >= c.crowdFailSeconds)) { g.status = 'lost'; g.signals.push('lost'); }
 }
 
 /** 取出并清空本帧信号（给音效/特效用）。 */
