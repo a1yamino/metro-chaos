@@ -1,5 +1,6 @@
 import { CONFIG, type Config } from './config';
 import { makeRng, type Rng } from './rng';
+import { distToRiver, isWater } from './map/level1';
 
 export type Shape = 'circle' | 'triangle' | 'square';
 export const SHAPES: readonly Shape[] = ['circle', 'triangle', 'square'];
@@ -41,12 +42,24 @@ const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax -
 const range = (g: Game, a: number, b: number) => a + g.rng() * (b - a);
 export const stationById = (g: Game, id: number) => g.stations.find(s => s.id === id);
 
+/** 站点只能放在陆地上：不在河/海里、离河道够远、整个站点圆不碰水、不贴棋盘边。 */
+export function stationSpotOk(cfg: Config, x: number, y: number): boolean {
+  const { width: W, height: H, stationEdgeMargin: m, stationRadius: r } = cfg;
+  if (x < m || x > W - m || y < 130 || y > H - m) return false;
+  if (distToRiver({ x, y }) < cfg.stationRiverMargin) return false;
+  return ![[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]].some(([dx, dy]) => isWater({ x: x + dx, y: y + dy }));
+}
+
 function freeSpot(g: Game, ignore?: Station): { x: number; y: number } | null {
-  const { width: W, height: H, minStationGap } = g.cfg;
-  for (let k = 0; k < 200; k++) {
-    const x = range(g, 40, W - 40), y = range(g, 130, H - 60);
-    if (g.stations.every(s => s === ignore || dist(s.x, s.y, x, y) > minStationGap) && !pointFlooded(g, x, y)) return { x, y };
+  const { width: W, height: H, minStationGap, stationEdgeMargin: m } = g.cfg;
+  const ok = (x: number, y: number) => stationSpotOk(g.cfg, x, y) && !pointFlooded(g, x, y)
+    && g.stations.every(s => s === ignore || dist(s.x, s.y, x, y) > minStationGap);
+  for (let k = 0; k < g.cfg.stationSpawnAttempts; k++) {
+    const x = range(g, m, W - m), y = range(g, 130, H - m);
+    if (ok(x, y)) return { x, y };
   }
+  // 确定性兜底：按网格扫描第一个合法位置
+  for (let y = 130; y <= H - m; y += 10) for (let x = m; x <= W - m; x += 10) if (ok(x, y)) return { x, y };
   return null;
 }
 
