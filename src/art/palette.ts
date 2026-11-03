@@ -1,7 +1,15 @@
-/** 占位调色板，artisan 会替换成正式版本；键名保持不变。 */
+/** Metro Chaos 调色板：色块风格，所有颜色只从这里取。键名与占位版一致。 */
 export const PALETTE = {
-  bg: '#f4f1ea', ink: '#222222', muted: '#888888', white: '#ffffff',
-  lines: ['#e3342f', '#3490dc', '#38a169'],
-  flood: '#3c8ce6', floodDeep: '#1d4f91', warning: '#ff8800', rush: '#ffaa00',
-  danger: '#e33333', good: '#22aa22', overlay: 'rgba(0,0,0,0.6)',
+  bg: '#f4f1ea',       // 纸色底
+  ink: '#222222',      // 描边、文字、列车
+  muted: '#888888',    // 次要文字
+  white: '#ffffff',    // 站点填充
+  lines: ['#e3342f', '#3490dc', '#38a169'], // 红 蓝 绿
+  flood: '#5b8fd1',    // 洪水区
+  floodDeep: '#1d4f91',
+  warning: '#f6c23e',  // 突变预警
+  rush: '#9561e2',     // 客流暴增，避开预警黄
+  danger: '#e3342f',
+  good: '#38a169',
+  overlay: 'rgba(34,34,34,0.6)',
 } as const;
