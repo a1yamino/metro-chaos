@@ -8,7 +8,8 @@ export const CONFIG = {
   startLines: 3,
   maxLinesCap: 5,
   upgradeInterval: 60, // 每隔多少秒给一次三选一升级
-  startBridges: 0,
+  startBridges: 2, // 开局桥数：过河或穿过洪水各消耗 1
+  startTunnels: 2, // 开局隧道数：只能过河，不防洪水
   carriageCapacity: 6,
   trainSpeed: 130, // 像素/秒
   stationRadius: 13,
