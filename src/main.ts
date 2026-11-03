@@ -2,7 +2,7 @@ import { CONFIG } from './config';
 import { LEVEL1 } from './map/level1';
 import { PALETTE as P } from './art/palette';
 import { playDeliver, playGameOver, playUpgrade, playWarning, unlockAudio } from './audio/sfx';
-import { UPGRADES, addCarriage, connect, takeUpgrade, type Upgrade, createGame, drainSignals, segmentFlooded, stationById, stationFlooded, step, type Game, type Shape, type Station } from './sim';
+import { addCarriage, connect, takeUpgrade, type Upgrade, createGame, drainSignals, segmentFlooded, stationById, stationFlooded, step, type Game, type Shape, type Station } from './sim';
 
 const { width: W, height: H } = CONFIG;
 const cv = document.getElementById('c') as HTMLCanvasElement;
@@ -27,8 +27,8 @@ const BEST_KEY = 'metro-chaos:best';
 const readBest = () => Number(localStorage.getItem(BEST_KEY) ?? 0);
 let best = readBest();
 let newBest = false;
-const UP_LABEL: Record<Upgrade, string> = { carriage: '🚃 车厢', line: '➕ 新线', bridge: '🌉 桥' };
-const UP_DESC: Record<Upgrade, string> = { carriage: '一条线载客 +6', line: '可多建一条线', bridge: '一段线可穿过洪水' };
+const UP_LABEL: Record<Upgrade, string> = { carriage: '🚃 车厢', line: '➕ 新线', bridge: '🌉 桥', tunnel: '🚇 隧道' };
+const UP_DESC: Record<Upgrade, string> = { carriage: '一条线载客 +6', line: '可多建一条线', bridge: '一段线可过河或穿过洪水', tunnel: '一段线可从河底穿过' };
 const upgradeBtn = (i: number) => ({ x: 30, y: 300 + i * 90, w: W - 60, h: 74 });
 const EV_LABEL = { FLOOD: '🌊 洪水', RELOCATE: '🏗 站点搬迁', RUSH: '👥 客流暴增' } as const;
 
@@ -119,7 +119,7 @@ function draw() {
   // HUD
   ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillRect(0, 0, W, 64);
   text(`🚇 ${g.delivered}`, 16, 40, 'bold 22px sans-serif', P.ink, 'left');
-  text(`最高 ${best} · ${fmtTime(g.t)}${g.bridges ? ` · 🌉${g.bridges}` : ''}`, 16, 58, '12px sans-serif', P.muted, 'left');
+  text(`最高 ${best} · ${fmtTime(g.t)} · 🌉${g.bridges} 🚇${g.tunnels}`, 16, 58, '12px sans-serif', P.muted, 'left');
   text(`下个突变 ${Math.ceil(g.eventTimer)}s`, W - 16, 28, '14px sans-serif', P.ink, 'right');
   text(`线路 ${g.lines.length}/${g.maxLines}`, W - 16, 48, '14px sans-serif', P.ink, 'right');
   const active = g.events[0];
@@ -144,7 +144,7 @@ const upgradeOk = (u: Upgrade) => u !== 'line' || g.maxLines < CONFIG.maxLinesCa
 function drawUpgrades() {
   ctx.fillStyle = P.overlay; ctx.fillRect(0, 0, W, H);
   text('选一个升级', W / 2, 260, 'bold 26px sans-serif', P.white);
-  UPGRADES.forEach((u, i) => {
+  g.upgradeChoices.forEach((u, i) => {
     const b = upgradeBtn(i), ok = upgradeOk(u);
     ctx.globalAlpha = ok ? 1 : 0.4; ctx.fillStyle = P.white; ctx.fillRect(b.x, b.y, b.w, b.h);
     text(UP_LABEL[u], b.x + 20, b.y + 32, 'bold 20px sans-serif', P.ink, 'left');
@@ -207,7 +207,7 @@ function down(e: MouseEvent | TouchEvent) {
   e.preventDefault(); unlockAudio();
   const p = pt(e);
   if (g.status !== 'playing') { if (inBtn(p, { x: W / 2 - 80, y: H / 2 + 110, w: 160, h: 50 })) restart(); return; }
-  if (g.upgradeOffer) { UPGRADES.forEach((u, i) => { if (inBtn(p, upgradeBtn(i)) && upgradeOk(u)) takeUpgrade(g, u); }); return; }
+  if (g.upgradeOffer) { g.upgradeChoices.forEach((u, i) => { if (inBtn(p, upgradeBtn(i)) && upgradeOk(u)) takeUpgrade(g, u); }); return; }
   if (g.carriages > 0 && inBtn(p, CARRIAGE_BTN)) { placingCarriage = !placingCarriage; return; }
   if (placingCarriage) {
     const id = nearestLine(p);
@@ -226,7 +226,7 @@ function move(e: MouseEvent | TouchEvent) {
   if (!s || s === drag.s) return;
   const r = connect(g, drag.s, s);
   if (r === 'ok') drag.s = s;
-  else if (!drag.warned) { drag.warned = true; pop(p.x, p.y - 20, r === 'flooded' ? '不能穿过洪水（需要桥）' : r === 'maxLines' ? `最多 ${g.maxLines} 条线` : '', P.danger); }
+  else if (!drag.warned) { drag.warned = true; pop(p.x, p.y - 20, r === 'flooded' ? '不能穿过洪水（需要桥）' : r === 'maxLines' ? `最多 ${g.maxLines} 条线` : r === 'needCrossing' ? '过河需要桥或隧道（已用完）' : '', P.danger); }
 }
 const up = () => { drag = null; };
 cv.addEventListener('mousedown', down); addEventListener('mousemove', move); addEventListener('mouseup', up);

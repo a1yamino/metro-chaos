@@ -54,6 +54,7 @@ describe('第一关规则', () => {
   it('不能把线画进洪水', () => {
     const g = createGame(3);
     const [a, b] = g.stations;
+    g.bridges = 0;
     g.events.push({ type: 'FLOOD', x: b.x, y: b.y, r: 30, left: 10 });
     expect(connect(g, a, b)).toBe('flooded');
   });
@@ -76,6 +77,7 @@ describe('第一关规则', () => {
   it('桥：消耗一座桥后可以把线画过洪水，且这段不再被切断', () => {
     const g = createGame(5);
     const [a, b] = g.stations;
+    g.bridges = 0;
     g.events.push({ type: 'FLOOD', x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, r: 10, left: 1e9 });
     expect(connect(g, a, b)).toBe('flooded');
     g.bridges = 1;
