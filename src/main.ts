@@ -1,3 +1,4 @@
+import { drawBasemap } from './art/basemap';
 import { CONFIG } from './config';
 import { LEVEL1 } from './map/level1';
 import { PALETTE as P } from './art/palette';
@@ -59,18 +60,8 @@ function tutorialHint(): string | null {
 function poly(pts: readonly { x: number; y: number }[]) {
   ctx.beginPath(); pts.forEach(({ x, y }, i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath();
 }
-function drawTerrain() {
-  // 占位渲染：正式底图见 B6（src/art/basemap.ts）
-  ctx.globalAlpha = 0.25; ctx.fillStyle = P.warning; for (const h of LEVEL1.hills) { poly(h); ctx.fill(); }
-  ctx.fillStyle = P.good; for (const k of LEVEL1.parks) { poly(k); ctx.fill(); }
-  ctx.globalAlpha = 0.45; ctx.fillStyle = P.flood; poly(LEVEL1.sea); ctx.fill();
-  ctx.strokeStyle = P.flood; ctx.lineWidth = LEVEL1.river.width; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.beginPath(); LEVEL1.river.center.forEach(({ x, y }, i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke(); ctx.globalAlpha = 1;
-}
-
 function draw() {
-  ctx.fillStyle = P.bg; ctx.fillRect(0, 0, W, H);
-  drawTerrain();
+  drawBasemap(ctx, LEVEL1, g.t);
   for (const e of g.events) if (e.type === 'FLOOD') {
     ctx.globalAlpha = 0.28; ctx.fillStyle = P.flood; circle(e.x, e.y, e.r); ctx.fill(); ctx.globalAlpha = 1;
   }
