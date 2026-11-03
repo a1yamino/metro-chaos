@@ -11,5 +11,14 @@ export const PALETTE = {
   rush: '#9561e2',     // 客流暴增，避开预警黄
   danger: '#e3342f',
   good: '#38a169',
+  // 底图
+  block: '#efebe2',     // 街区
+  street: '#f9f7f2',    // 街道
+  water: '#bcd6ea',     // 河与海
+  waterLine: '#9cc0dd', // 岸线、波纹
+  park: '#cfe3c1',
+  parkDot: '#b5d3a3',
+  hill: '#e2d7c0',
+  hillLine: '#cdbf9f',
   overlay: 'rgba(34,34,34,0.6)',
 } as const;
