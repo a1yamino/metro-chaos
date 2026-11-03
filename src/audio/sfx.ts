@@ -37,3 +37,13 @@ export function playGameOver() {
 }
 /** 兼容旧调用；无尽模式下请改用 playUpgrade */
 export const playClear = playUpgrade;
+/** 架桥：两声木槌敲击 */
+export function playBridge() {
+  tone(330, 0, 0.07, { type: 'triangle', vol: 0.2, to: 300 });
+  tone(440, 0.09, 0.09, { type: 'triangle', vol: 0.18, to: 400 });
+}
+/** 挖隧道：低沉下滑的隆隆声 */
+export function playTunnel() {
+  tone(180, 0, 0.32, { type: 'sawtooth', vol: 0.07, to: 60 });
+  tone(90, 0.02, 0.3, { type: 'triangle', vol: 0.12, to: 45 });
+}

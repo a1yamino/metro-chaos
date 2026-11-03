@@ -1,9 +1,10 @@
 import { drawBasemap } from './art/basemap';
+import { drawCrossing } from './art/crossing';
 import { CONFIG } from './config';
 import { LEVEL1 } from './map/level1';
 import { PALETTE as P } from './art/palette';
-import { playDeliver, playGameOver, playUpgrade, playWarning, unlockAudio } from './audio/sfx';
-import { addCarriage, connect, takeUpgrade, type Upgrade, createGame, drainSignals, segmentFlooded, stationById, stationFlooded, step, type Game, type Shape, type Station } from './sim';
+import { playBridge, playDeliver, playGameOver, playTunnel, playUpgrade, playWarning, unlockAudio } from './audio/sfx';
+import { addCarriage, connect, takeUpgrade, type Upgrade, createGame, drainSignals, segKey, segmentFlooded, stationById, stationFlooded, step, type Game, type Shape, type Station } from './sim';
 
 const { width: W, height: H } = CONFIG;
 const cv = document.getElementById('c') as HTMLCanvasElement;
@@ -76,6 +77,9 @@ function draw() {
       if (broken) ctx.setLineDash([8, 8]);
       ctx.beginPath(); ctx.moveTo(S[i].x, S[i].y); ctx.lineTo(S[i + 1].x, S[i + 1].y); ctx.stroke();
       ctx.setLineDash([]); ctx.globalAlpha = 1;
+      const k = segKey(S[i].id, S[i + 1].id);
+      if (!broken && g.tunneled.has(k)) drawCrossing(ctx, S[i], S[i + 1], 'tunnel', lineColor(l.id));
+      else if (!broken && g.bridged.has(k)) drawCrossing(ctx, S[i], S[i + 1], 'bridge', lineColor(l.id));
     }
   }
   if (drag) {
@@ -212,8 +216,8 @@ function move(e: MouseEvent | TouchEvent) {
   drag.x = p.x; drag.y = p.y; drag.bad = segmentFlooded(g, drag.s, p);
   const s = hit(p);
   if (!s || s === drag.s) return;
-  const r = connect(g, drag.s, s);
-  if (r === 'ok') drag.s = s;
+  const nb = g.bridges, nt = g.tunnels, r = connect(g, drag.s, s);
+  if (r === 'ok') { drag.s = s; if (g.tunnels < nt) playTunnel(); else if (g.bridges < nb) playBridge(); }
   else if (!drag.warned) { drag.warned = true; pop(p.x, p.y - 20, r === 'flooded' ? '不能穿过洪水（需要桥）' : r === 'maxLines' ? `最多 ${g.maxLines} 条线` : r === 'needCrossing' ? '过河需要桥或隧道（已用完）' : '', P.danger); }
 }
 const up = () => { drag = null; };

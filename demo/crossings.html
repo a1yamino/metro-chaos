@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><title>桥 / 隧道 试看试听</title>
+<style>body{margin:0;font:14px sans-serif;background:#f4f1ea}#b{position:fixed;top:8px;left:8px;display:flex;gap:6px}button{padding:8px 12px}</style>
+<div id="b"><button id="br">🌉 架桥音效</button><button id="tu">🚇 隧道音效</button></div>
+<canvas id="c" width="390" height="844"></canvas>
+<script type="module">
+import { drawBasemap } from '../src/art/basemap';
+import { drawCrossing } from '../src/art/crossing';
+import { LEVEL1 } from '../src/map/level1';
+import { PALETTE as P } from '../src/art/palette';
+import { playBridge, playTunnel, unlockAudio } from '../src/audio/sfx';
+const ctx = document.getElementById('c').getContext('2d');
+const segs = [[{x:60,y:250},{x:320,y:330},'bridge',P.lines[0]],[{x:70,y:470},{x:330,y:520},'tunnel',P.lines[1]],[{x:60,y:640},{x:330,y:600},'bridge',P.lines[2]]];
+const frame = t => { drawBasemap(ctx, LEVEL1, t/1000); ctx.lineCap='round';
+  for (const [a,b,k,c] of segs){ ctx.strokeStyle=c; ctx.lineWidth=7; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); drawCrossing(ctx,a,b,k,c);
+    for (const p of [a,b]){ ctx.fillStyle=P.white; ctx.strokeStyle=P.ink; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(p.x,p.y,12,0,7); ctx.fill(); ctx.stroke(); } }
+  requestAnimationFrame(frame); };
+requestAnimationFrame(frame);
+br.onclick = () => { unlockAudio(); playBridge(); }; tu.onclick = () => { unlockAudio(); playTunnel(); };
+</script>
