@@ -4,7 +4,7 @@ export const PALETTE = {
   ink: '#222222',      // 描边、文字、列车
   muted: '#888888',    // 次要文字
   white: '#ffffff',    // 站点填充
-  lines: ['#e3342f', '#3490dc', '#38a169'], // 红 蓝 绿
+  lines: ['#e3342f', '#3490dc', '#38a169', '#f6993f', '#8d5a3b'], // 红 蓝 绿 橙 棕，避开洪水蓝、预警黄、暴增紫
   flood: '#5b8fd1',    // 洪水区
   floodDeep: '#1d4f91',
   warning: '#f6c23e',  // 突变预警
