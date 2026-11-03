@@ -54,7 +54,7 @@ function collectWaterStations(seeds = SEEDS): Hit[] {
 
 describe('规则：站点不在水上', () => {
   // A5 修复后改为 it
-  it.fails('开局、新增、RELOCATE 搬站的站点都不落在河/海里', () => {
+  it('开局、新增、RELOCATE 搬站的站点都不落在河/海里', () => {
     const hits = collectWaterStations();
     expect(hits,
       `落水站：${hits.slice(0, 5).map(h => `seed=${h.seed} 站${h.id} ${h.kind} (${h.x},${h.y})`).join('；')}。` +

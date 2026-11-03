@@ -10,3 +10,7 @@
 - 所有参数在 `src/config.ts`；规则逻辑在 `src/sim.ts`（纯函数，可测）；渲染和输入在 `src/main.ts`。
 - `npm run check`：lint → 测试 → 构建 → 包体积预算（JS gzip ≤ 30 KB）→ 帧基准（sim.step ≤ 1 ms）。
 - 素材接口：`src/art/palette.ts`（`PALETTE`）、`src/audio/sfx.ts`（`playDeliver/playWarning/playClear`），目前是占位。
+
+## 本地长跑
+
+`npm run soak`：200 个种子 × 300 秒，检查站点从不落在水里、贴河或贴边（约 1 秒）。不在 `npm run check` 和 CI 里，改动站点生成或地形后请在本地跑一次，并把结果写进 PR 描述。
