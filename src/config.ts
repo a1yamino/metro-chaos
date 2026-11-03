@@ -2,6 +2,7 @@
 export const CONFIG = {
   width: 390,
   height: 844,
+  riverWidth: 34, // 第一关河道宽度（像素）
   crowdLimit: 6, // 超过即拥挤
   crowdFailSeconds: 10, // 拥挤持续多久失败
   startLines: 3,
