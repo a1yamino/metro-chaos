@@ -20,10 +20,10 @@ function buildStatic(map: LevelMap, dpr: number) {
   const c = cv.getContext('2d')!; c.scale(dpr, dpr);
   c.fillStyle = P.street; c.fillRect(0, 0, w, h);
   // 街区：错位网格，块大小有轻微随机
-  const G = 26;
+  const G = 34;
   for (let y = 0; y < h; y += G) for (let x = (y / G) % 2 ? -G / 2 : 0; x < w; x += G) {
     if (hash(x, y) < 0.08) continue; // 偶尔留空地
-    const pad = 3 + hash(y, x) * 2;
+    const pad = 4 + hash(y, x) * 2;
     c.fillStyle = P.block; c.beginPath(); c.roundRect(x + pad, y + pad, G - pad * 2, G - pad * 2, 3); c.fill();
   }
   c.lineJoin = c.lineCap = 'round';

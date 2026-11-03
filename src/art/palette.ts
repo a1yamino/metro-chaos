@@ -12,7 +12,7 @@ export const PALETTE = {
   danger: '#e3342f',
   good: '#38a169',
   // 底图
-  block: '#e9e3d6',     // 街区
+  block: '#efebe2',     // 街区
   street: '#f9f7f2',    // 街道
   water: '#bcd6ea',     // 河与海
   waterLine: '#9cc0dd', // 岸线、波纹

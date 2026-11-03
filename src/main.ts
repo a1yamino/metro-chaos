@@ -57,9 +57,6 @@ function tutorialHint(): string | null {
   return `每隔一段时间有突变，提前 ${CONFIG.eventWarning} 秒预警`;
 }
 
-function poly(pts: readonly { x: number; y: number }[]) {
-  ctx.beginPath(); pts.forEach(({ x, y }, i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath();
-}
 function draw() {
   drawBasemap(ctx, LEVEL1, g.t);
   for (const e of g.events) if (e.type === 'FLOOD') {
