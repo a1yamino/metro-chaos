@@ -122,14 +122,14 @@ function spawnPassenger(g: Game, s: Station) {
 
 function pickEvent(g: Game): GameEvent {
   const { flood, rush } = g.cfg;
-  const type = (['FLOOD', 'RELOCATE', 'RUSH'] as const)[Math.floor(g.rng() * 3)];
+  // 必败约束：暴增只落在不拥挤的站上；没有这样的站就不抽暴增
+  const calm = g.stations.filter(s => s.queue.length <= g.cfg.crowdLimit / 2);
+  const types = calm.length ? (['FLOOD', 'RELOCATE', 'RUSH'] as const) : (['FLOOD', 'RELOCATE'] as const);
+  const type = types[Math.floor(g.rng() * types.length)];
   const any = g.stations[Math.floor(g.rng() * g.stations.length)];
   if (type === 'FLOOD') return { type, x: any.x + range(g, -30, 30), y: any.y + range(g, -30, 30), r: flood.radius, left: flood.duration };
   if (type === 'RELOCATE') return { type, stationId: any.id, left: 0 };
-  // 必败约束：暴增只落在当前不拥挤的站上
-  const calm = g.stations.filter(s => s.queue.length <= g.cfg.crowdLimit / 2);
-  const target = calm.length ? calm[Math.floor(g.rng() * calm.length)] : any;
-  return { type, stationId: target.id, left: rush.duration };
+  return { type, stationId: calm[Math.floor(g.rng() * calm.length)].id, left: rush.duration };
 }
 
 function startEvent(g: Game, e: GameEvent) {

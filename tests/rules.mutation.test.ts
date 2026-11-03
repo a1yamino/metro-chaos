@@ -29,10 +29,8 @@ function nextWarning(g: Game) {
 }
 
 describe('规则：突变不能造成必败', () => {
-  // 已知红：所有站都拥挤时 pickEvent 回退到任意站（src/sim.ts 的 `: any`），暴增会落在拥挤站上。
-  // 交 forge 修；修好后 it.fails 会变红，届时把它改回 it。
   for (const all of [false, true]) {
-    (all ? it.fails : it)(`${all ? '所有站' : '一半站'}拥挤时，三种突变都不会让游戏必败`, () => {
+    it(`${all ? '所有站' : '一半站'}拥挤时，三种突变都不会让游戏必败`, () => {
       const seen = new Set<EventType>();
       for (let seed = 0; seed < SEEDS; seed++) {
         const g = createGame(seed);
@@ -64,7 +62,8 @@ describe('规则：突变不能造成必败', () => {
           }
         }
       }
-      expect([...seen].sort(), '种子应覆盖全部三种突变').toEqual(['FLOOD', 'RELOCATE', 'RUSH']);
+      // 所有站都拥挤时不会抽到暴增，所以只要求覆盖另外两种
+      expect([...seen].sort(), '种子应覆盖所有可能出现的突变').toEqual(all ? ['FLOOD', 'RELOCATE'] : ['FLOOD', 'RELOCATE', 'RUSH']);
     });
   }
 });
