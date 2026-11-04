@@ -3,7 +3,7 @@
 <div id="b"><button data-m="flood">涨水</button><button data-m="relocate">搬迁</button><button data-m="rush">暴增</button></div>
 <canvas id="c" width="390" height="844"></canvas>
 <script type="module">
-// 仅演示页：?m=flood|relocate|rush 选突变，?phase=warn|play 选预警或过场，?at=秒 定格（warn 从预警开始计，play 从突变发生计），?t=秒 底图时间（90 为最深夜）
+// 仅演示页：?m=flood|relocate|rush 选突变，?phase=warn|play|cancel 选预警、过场或取消（cancel 仅搬迁：目标失效，站点不动），?at=秒 定格（warn 从预警开始计，play 从突变发生计），?t=秒 底图时间（90 为最深夜）
 // 演示页自己造一个假的只读视图，不跑 sim；站点滑动按 sim 同样的插值写
 import { drawBasemap } from '../src/art/basemap';
 import { drawMutationsOver, drawMutationsUnder, updateMutationFx } from '../src/art/mutations';
@@ -22,15 +22,15 @@ let g, ev, startAt;
 function reset() {
   g = { t: 0, events: [], warning: null, eventTimer: 99, stations: pos.map(([x, y], i) => ({ id: i + 1, x, y, tx: x, ty: y, shape: SH[i], queue: [], rush: false })) };
   ev = m === 'flood' ? { type: 'FLOOD', x: 115, y: 575, r: CONFIG.flood.radius, left: CONFIG.flood.duration }
-    : { type: m === 'rush' ? 'RUSH' : 'RELOCATE', stationId: 2, left: m === 'rush' ? CONFIG.rush.duration : 0 };
+    : { type: m === 'rush' ? 'RUSH' : 'RELOCATE', stationId: 2, tx: 300, ty: 250, left: m === 'rush' ? CONFIG.rush.duration : 0 };
   g.warning = ev; g.eventTimer = CONFIG.eventWarning;
-  startAt = phase === 'play' || at === null ? CONFIG.eventWarning : Infinity; // play：先走完 5 秒预警再发生
+  startAt = phase !== 'warn' || at === null ? CONFIG.eventWarning : Infinity; // play：先走完 5 秒预警再发生
 }
 function frame(dt) {
   g.t += dt; g.eventTimer -= dt;
   for (const s of g.stations) { const k = Math.min(1, dt * 4); s.x += (s.tx - s.x) * k; s.y += (s.ty - s.y) * k; }
   if (g.warning && g.t >= startAt) {
-    if (ev.type === 'RELOCATE') { const s = g.stations[1]; s.tx = 300; s.ty = 250; } else g.events.push(ev);
+    if (ev.type === 'RELOCATE') { if (phase !== 'cancel') { const s = g.stations[1]; s.tx = ev.tx; s.ty = ev.ty; } } else g.events.push(ev);
     if (ev.type === 'RUSH') g.stations[1].rush = true;
     g.warning = null;
   }
@@ -46,7 +46,7 @@ function draw() {
     shape(s.x, s.y, s.shape, CONFIG.stationRadius, P.white, P.ink);
   }
 }
-function run(until) { reset(); const end = (phase === 'play' ? CONFIG.eventWarning : 0) + until; while (g.t < end - 1e-6) frame(Math.min(1 / 60, end - g.t)); draw(); }
+function run(until) { reset(); const end = (phase !== 'warn' ? CONFIG.eventWarning : 0) + until; while (g.t < end - 1e-6) frame(Math.min(1 / 60, end - g.t)); draw(); }
 document.querySelectorAll('button').forEach(b => b.onclick = () => { m = b.dataset.m; reset(); });
 if (at !== null) run(at);
 else { reset(); let last = performance.now(); const loop = now => { frame(Math.min(0.05, (now - last) / 1000)); last = now; if (g.t > CONFIG.eventWarning + 3) reset(); draw(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
