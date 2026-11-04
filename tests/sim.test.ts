@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../src/config';
+import { pointAt, route } from '../src/route';
 import { addCarriage, connect, createGame, eventInterval, step, takeUpgrade, type Game, type Shape } from '../src/sim';
 
 const run = (g: Game, seconds: number, dt = 1 / 60) => { for (let t = 0; t < seconds && g.status === 'playing'; t += dt) step(g, dt); };
@@ -78,7 +79,8 @@ describe('第一关规则', () => {
     const g = createGame(5);
     const [a, b] = g.stations;
     g.bridges = 0;
-    g.events.push({ type: 'FLOOD', x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, r: 10, left: 1e9 });
+    const mid = pointAt(route(a, b), 0.5); // 洪水放在地铁图走线的中点
+    g.events.push({ type: 'FLOOD', x: mid.x, y: mid.y, r: 10, left: 1e9 });
     expect(connect(g, a, b)).toBe('flooded');
     g.bridges = 1;
     expect(connect(g, a, b)).toBe('ok');

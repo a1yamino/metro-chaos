@@ -4,6 +4,8 @@ import { CONFIG } from './config';
 import { LEVEL1 } from './map/level1';
 import { PALETTE as P } from './art/palette';
 import { playBridge, playDeliver, playGameOver, playTunnel, playUpgrade, playWarning, unlockAudio } from './audio/sfx';
+import { pointAt, route, type Route } from './route';
+import { segmentCrossesWater } from './map/level1';
 import { addCarriage, connect, takeUpgrade, type Upgrade, createGame, drainSignals, segKey, segmentFlooded, stationById, stationFlooded, step, type Game, type Shape, type Station } from './sim';
 
 const { width: W, height: H } = CONFIG;
@@ -58,6 +60,14 @@ function tutorialHint(): string | null {
   return `每隔一段时间有突变，提前 ${CONFIG.eventWarning} 秒预警`;
 }
 
+/** 画一条地铁图折线：直线腿 + arcTo 圆角。 */
+function strokeRoute(r: Route) {
+  const [a, c, b] = r.legs.length === 2 ? [r.legs[0].a, r.legs[0].b, r.legs[1].b] : [r.legs[0].a, null, r.legs[0].b];
+  ctx.beginPath(); ctx.moveTo(a.x, a.y);
+  if (c && r.arc) ctx.arcTo(c.x, c.y, b.x, b.y, r.arc.r);
+  ctx.lineTo(b.x, b.y); ctx.stroke();
+}
+
 function draw() {
   drawBasemap(ctx, LEVEL1, g.t);
   for (const e of g.events) if (e.type === 'FLOOD') {
@@ -75,22 +85,24 @@ function draw() {
       const broken = segmentFlooded(g, S[i], S[i + 1]);
       ctx.strokeStyle = lineColor(l.id); ctx.globalAlpha = broken ? 0.35 : 1; ctx.lineWidth = placingCarriage ? 11 : 7;
       if (broken) ctx.setLineDash([8, 8]);
-      ctx.beginPath(); ctx.moveTo(S[i].x, S[i].y); ctx.lineTo(S[i + 1].x, S[i + 1].y); ctx.stroke();
+      const r = route(S[i], S[i + 1]);
+      strokeRoute(r);
       ctx.setLineDash([]); ctx.globalAlpha = 1;
       const k = segKey(S[i].id, S[i + 1].id);
-      if (!broken && g.tunneled.has(k)) drawCrossing(ctx, S[i], S[i + 1], 'tunnel', lineColor(l.id));
-      else if (!broken && g.bridged.has(k)) drawCrossing(ctx, S[i], S[i + 1], 'bridge', lineColor(l.id));
+      const kind = broken ? null : g.tunneled.has(k) ? 'tunnel' : g.bridged.has(k) ? 'bridge' : null;
+      if (kind) for (const leg of r.legs) if (segmentCrossesWater(leg.a, leg.b)) drawCrossing(ctx, leg.a, leg.b, kind, lineColor(l.id));
     }
   }
   if (drag) {
     ctx.strokeStyle = drag.bad ? P.danger : P.muted; ctx.lineWidth = 5; ctx.setLineDash([6, 6]);
-    ctx.beginPath(); ctx.moveTo(drag.s.x, drag.s.y); ctx.lineTo(drag.x, drag.y); ctx.stroke(); ctx.setLineDash([]);
+    strokeRoute(route(drag.s, drag)); ctx.setLineDash([]);
   }
   for (const l of g.lines) {
     const S = l.stops.map(id => stationById(g, id)!), t = l.train;
     const a = S[t.seg], b = S[Math.min(t.seg + 1, S.length - 1)];
     const cars = t.capacity / CONFIG.carriageCapacity, len = 28 + (cars - 1) * 16;
-    ctx.save(); ctx.translate(a.x + (b.x - a.x) * t.f, a.y + (b.y - a.y) * t.f); ctx.rotate(Math.atan2(b.y - a.y, b.x - a.x));
+    const at = pointAt(route(a, b), t.f);
+    ctx.save(); ctx.translate(at.x, at.y); ctx.rotate(at.angle);
     ctx.fillStyle = lineColor(l.id); ctx.fillRect(-len / 2, -8, len, 16);
     t.cargo.forEach((c, k) => shape(-len / 2 + 5 + (k % (3 * cars)) * 9 * (len / (27 * cars)) , -3.5 + Math.floor(k / (3 * cars)) * 7, c, 2.6, P.white));
     ctx.restore();
@@ -184,8 +196,8 @@ function nearestLine(p: Pt): number | null {
   let best: number | null = null, bd = 24;
   for (const l of g.lines) {
     const S = l.stops.map(id => stationById(g, id)!);
-    for (let i = 0; i < S.length - 1; i++) {
-      const a = S[i], b = S[i + 1], dx = b.x - a.x, dy = b.y - a.y;
+    for (let i = 0; i < S.length - 1; i++) for (const leg of route(S[i], S[i + 1]).legs) {
+      const { a, b } = leg, dx = b.x - a.x, dy = b.y - a.y;
       const k = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
       const d = Math.hypot(p.x - a.x - dx * k, p.y - a.y - dy * k);
       if (d < bd) { bd = d; best = l.id; }

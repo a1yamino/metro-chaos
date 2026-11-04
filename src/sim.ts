@@ -1,5 +1,6 @@
 import { CONFIG, type Config } from './config';
 import { makeRng, type Rng } from './rng';
+import { pointAt, route, routeLength } from './route';
 import { distToRiver, isWater, segmentCrossesWater } from './map/level1';
 
 export type Shape = 'circle' | 'triangle' | 'square';
@@ -80,7 +81,8 @@ export const stationFlooded = (g: Game, s: Station) => pointFlooded(g, s.x, s.y)
 export const segKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
 export function segmentFlooded(g: Game, a: { x: number; y: number; id?: number }, b: { x: number; y: number; id?: number }): boolean {
   if (a.id !== undefined && b.id !== undefined && g.bridged.has(segKey(a.id, b.id))) return false;
-  for (let k = 0; k <= 10; k++) if (pointFlooded(g, a.x + (b.x - a.x) * k / 10, a.y + (b.y - a.y) * k / 10)) return true;
+  const r = route(a, b);
+  for (let k = 0; k <= 20; k++) { const p = pointAt(r, k / 20); if (pointFlooded(g, p.x, p.y)) return true; }
   return false;
 }
 
@@ -94,7 +96,7 @@ export function connect(g: Game, a: Station, b: Station): ConnectResult {
   if (stationFlooded(g, a) || stationFlooded(g, b)) return 'flooded';
   const needsBridge = segmentFlooded(g, a, b);
   if (needsBridge && g.bridges <= 0) return 'flooded';
-  const water = !needsBridge && segmentCrossesWater(a, b);
+  const water = !needsBridge && route(a, b).legs.some(l => segmentCrossesWater(l.a, l.b));
   const use: 'bridge' | 'tunnel' | null = needsBridge ? 'bridge' : !water ? null : g.tunnels > 0 ? 'tunnel' : g.bridges > 0 ? 'bridge' : null;
   if (water && !use) { g.signals.push('needCrossing'); return 'needCrossing'; }
   const r = attach(g, a, b);
@@ -187,10 +189,10 @@ function stepTrain(g: Game, l: Line, dt: number) {
   if (t.seg >= S.length - 1) { t.seg = S.length - 2; t.f = 1; }
   if (t.wait > 0) { t.wait -= dt; return; }
   const a = S[t.seg], b = S[t.seg + 1];
-  const len = dist(a.x, a.y, b.x, b.y) || 1;
+  const path = route(a, b), len = routeLength(path) || 1;
   const nf = t.f + t.dir * g.cfg.trainSpeed * dt / len;
   const bridged = g.bridged.has(segKey(a.id, b.id));
-  const inFlood = (f: number) => !bridged && pointFlooded(g, a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f);
+  const inFlood = (f: number) => { if (bridged) return false; const p = pointAt(path, f); return pointFlooded(g, p.x, p.y); };
   if (inFlood(nf + t.dir * 14 / len) && !inFlood(t.f)) { t.dir = t.dir === 1 ? -1 : 1; t.wait = 0.3; return; }
   t.f = nf;
   if (t.f >= 1 || t.f <= 0) {
