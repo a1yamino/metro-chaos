@@ -13,7 +13,8 @@ export const PLAY = 1; // 过场时长（秒）
 const N = 48, LIFE = 0.8;
 const pool = new Float32Array(N * 6).fill(LIFE + 1); // [x, y, vx, vy, age, kind] 定长复用
 let next = 0;
-type Play = { ev: GameEvent; t0: number; fx: number; fy: number };
+type Play = { ev: GameEvent; t0: number; fx: number; fy: number; cancel: boolean };
+const CANCEL = 0.5; // 搬迁取消：目标残影消散时长
 let plays: Play[] = [];
 let prevWarn: GameEvent | null = null, last: MutView | null = null;
 
@@ -26,8 +27,9 @@ function spray(x: number, y: number, n: number, kind: number, v0: number) {
 }
 
 /** 突变刚发生：登记过场。from 是站点搬迁前的位置。 */
-export function startMutation(ev: GameEvent, t0: number, from?: { x: number; y: number }) {
-  plays.push({ ev, t0, fx: from?.x ?? 0, fy: from?.y ?? 0 });
+export function startMutation(ev: GameEvent, t0: number, from?: { x: number; y: number }, cancel = false) {
+  plays.push({ ev, t0, fx: from?.x ?? 0, fy: from?.y ?? 0, cancel });
+  if (cancel) return;
   if (ev.type === 'FLOOD') spray(ev.x, ev.y, 18, 0, 120);
   else if (from) spray(from.x, from.y, 14, ev.type === 'RUSH' ? 2 : 1, 70);
 }
@@ -39,7 +41,9 @@ export function updateMutationFx(g: MutView, dt: number) {
     const w = prevWarn;
     const s = w.type === 'FLOOD' ? null : g.stations.find(o => o.id === w.stationId);
     // 站点刚被设了新目标，x/y 还在原地（sim 本帧只挪了一小步，误差可忽略）
-    startMutation(w.type === 'FLOOD' ? (g.events.find(e => e.type === 'FLOOD' && e.x === w.x && e.y === w.y) ?? w) : w, g.t, s ?? undefined);
+    // 搬迁的 tx/ty 是承诺：站点目标没变成它 → sim 取消了这次搬迁
+    const cancel = w.type === 'RELOCATE' && !!s && (s.tx !== w.tx || s.ty !== w.ty);
+    startMutation(w.type === 'FLOOD' ? (g.events.find(e => e.type === 'FLOOD' && e.x === w.x && e.y === w.y) ?? w) : w, g.t, s ?? undefined, cancel);
   }
   prevWarn = g.warning;
   plays = plays.filter(p => g.t - p.t0 < PLAY);
@@ -57,6 +61,16 @@ function shapePath(ctx: CanvasRenderingContext2D, x: number, y: number, sh: Shap
   if (sh === 'circle') ctx.arc(x, y, r, 0, Math.PI * 2);
   else if (sh === 'square') ctx.rect(x - r * 0.85, y - r * 0.85, r * 1.7, r * 1.7);
   else { ctx.moveTo(x, y - r * 1.1); ctx.lineTo(x + r, y + r * 0.75); ctx.lineTo(x - r, y + r * 0.75); ctx.closePath(); }
+}
+
+/** 淡虚线箭头 a→b，箭头停在目标残影外 */
+function arrow(ctx: CanvasRenderingContext2D, ax: number, ay: number, bx: number, by: number, alpha: number) {
+  const L = Math.hypot(bx - ax, by - ay); if (L < 50) return;
+  const ux = (bx - ax) / L, uy = (by - ay) / L, sx = ax + ux * 30, sy = ay + uy * 30, ex = bx - ux * 28, ey = by - uy * 28;
+  ctx.globalAlpha = alpha; ctx.strokeStyle = P.warning; ctx.lineWidth = 2; ctx.setLineDash([5, 6]);
+  ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex - ux * 8 - uy * 6, ey - uy * 8 + ux * 6); ctx.moveTo(ex, ey); ctx.lineTo(ex - ux * 8 + uy * 6, ey - uy * 8 - ux * 6); ctx.stroke();
+  ctx.globalAlpha = 1;
 }
 
 /** 倒计时环：剩余预警时间占满一圈的比例 */
@@ -101,15 +115,27 @@ export function drawMutationsOver(ctx: CanvasRenderingContext2D, g: MutView) {
       const c = w.type === 'RUSH' ? P.rush : P.warning, pulse = 0.5 + 0.5 * Math.sin(g.t * 12);
       ctx.globalAlpha = 0.25 * pulse; ctx.fillStyle = c; circ(ctx, s.x, s.y, 30); ctx.fill(); ctx.globalAlpha = 1;
       countdown(ctx, s.x, s.y, 27, g.eventTimer, c);
-      if (w.type === 'RELOCATE') { // 站点在原地上下跳：要被搬走了
-        ctx.strokeStyle = P.warning; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
-        shapePath(ctx, s.x, s.y - 6 - 4 * pulse, s.shape, CONFIG.stationRadius + 4); ctx.stroke(); ctx.setLineDash([]);
+      if (w.type === 'RELOCATE') { // 新位置的虚线残影 + 倒计时环，站点到目标拖一条淡虚线箭头
+        arrow(ctx, s.x, s.y, w.tx, w.ty, 0.45);
+        ctx.globalAlpha = 0.6 + 0.4 * pulse; ctx.fillStyle = P.white; ctx.strokeStyle = P.warning; ctx.lineWidth = 2.5; ctx.setLineDash([5, 4]);
+        shapePath(ctx, w.tx, w.ty, s.shape, CONFIG.stationRadius); ctx.globalAlpha *= 0.5; ctx.fill(); ctx.globalAlpha = 0.6 + 0.4 * pulse; ctx.stroke();
+        ctx.setLineDash([]); ctx.globalAlpha = 1;
+        countdown(ctx, w.tx, w.ty, 22, g.eventTimer, P.warning);
       }
     }
   }
   for (const p of plays) {
     const u = (g.t - p.t0) / PLAY;
-    if (p.ev.type === 'RELOCATE') {
+    if (p.ev.type === 'RELOCATE' && p.cancel) {
+      const s = g.stations.find(o => o.id === (p.ev as { stationId: number }).stationId), v = (g.t - p.t0) / CANCEL;
+      if (!s || v >= 1) continue;
+      const { tx, ty } = p.ev, k = CONFIG.stationRadius * (1 + 0.4 * v);
+      ctx.globalAlpha = 1 - v; ctx.strokeStyle = P.warning; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+      shapePath(ctx, tx, ty, s.shape, k); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = P.danger; ctx.lineWidth = 3; const d = 7;
+      ctx.beginPath(); ctx.moveTo(tx - d, ty - d); ctx.lineTo(tx + d, ty + d); ctx.moveTo(tx + d, ty - d); ctx.lineTo(tx - d, ty + d); ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else if (p.ev.type === 'RELOCATE') {
       const id = p.ev.stationId, s = g.stations.find(o => o.id === id);
       if (!s) continue;
       // 原地残影淡出，新位置虚线框收拢，中间拖一条虚线轨迹
@@ -117,7 +143,7 @@ export function drawMutationsOver(ctx: CanvasRenderingContext2D, g: MutView) {
       ctx.fillStyle = P.white; ctx.fill(); ctx.strokeStyle = P.ink; ctx.lineWidth = 2; ctx.stroke();
       ctx.globalAlpha = 0.8 * (1 - u); ctx.strokeStyle = P.warning; ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
       ctx.beginPath(); ctx.moveTo(p.fx, p.fy); ctx.lineTo(s.x, s.y); ctx.stroke();
-      ctx.globalAlpha = 1 - u * 0.6; shapePath(ctx, s.tx, s.ty, s.shape, CONFIG.stationRadius + 14 * (1 - easeOut(u))); ctx.stroke();
+      ctx.globalAlpha = 1 - u * 0.6; shapePath(ctx, p.ev.tx, p.ev.ty, s.shape, CONFIG.stationRadius + 14 * (1 - easeOut(u))); ctx.stroke();
       ctx.setLineDash([]); ctx.globalAlpha = 1;
     } else if (p.ev.type === 'RUSH') {
       const id = p.ev.stationId, s = g.stations.find(o => o.id === id);
