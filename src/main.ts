@@ -1,6 +1,7 @@
 import { drawBasemap } from './art/basemap';
 import { drawCrossing } from './art/crossing';
 import { burstAt, drawParticles, drawPopRing, stationPose, updateStationFx } from './art/stations';
+import { drawMutationsOver, drawMutationsUnder, updateMutationFx } from './art/mutations';
 import { drawTrain, resetTrainFx, smoothAngle } from './art/trains';
 import { CONFIG } from './config';
 import { LEVEL1 } from './map/level1';
@@ -73,14 +74,8 @@ function strokeRoute(r: Route) {
 let lastTrainT = 0;
 function draw() {
   drawBasemap(ctx, LEVEL1, g.t);
-  for (const e of g.events) if (e.type === 'FLOOD') {
-    ctx.globalAlpha = 0.28; ctx.fillStyle = P.flood; circle(e.x, e.y, e.r); ctx.fill(); ctx.globalAlpha = 1;
-  }
+  drawMutationsUnder(ctx, g);
   const w = g.warning;
-  if (w?.type === 'FLOOD') {
-    ctx.globalAlpha = 0.4 + 0.4 * Math.sin(g.t * 12); ctx.strokeStyle = P.flood; ctx.lineWidth = 3; ctx.setLineDash([4, 8]);
-    circle(w.x, w.y, w.r); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
-  }
   ctx.lineCap = ctx.lineJoin = 'round';
   for (const l of g.lines) {
     const S = l.stops.map(id => stationById(g, id)!);
@@ -108,10 +103,10 @@ function draw() {
     drawTrain(ctx, at.x, at.y, smoothAngle(l.id, at.angle, g.t - lastTrainT), lineColor(l.id), cars, t.cargo);
   }
   lastTrainT = g.t;
+  drawMutationsOver(ctx, g);
   for (const s of g.stations) {
     const off = stationFlooded(g, s);
     if (s.rush) { ctx.globalAlpha = 0.25 + 0.15 * Math.sin(g.t * 8); ctx.fillStyle = P.rush; circle(s.x, s.y, 26); ctx.fill(); ctx.globalAlpha = 1; }
-    if (w && w.type !== 'FLOOD' && w.stationId === s.id) { ctx.strokeStyle = P.warning; ctx.lineWidth = 2; circle(s.x, s.y, 22 + 4 * Math.sin(g.t * 12)); ctx.stroke(); }
     if (s.crowdTime > 0) {
       ctx.strokeStyle = off ? P.flood : P.danger; ctx.lineWidth = 5; ctx.beginPath();
       ctx.arc(s.x, s.y, 21, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * s.crowdTime / CONFIG.crowdFailSeconds); ctx.stroke();
@@ -185,6 +180,7 @@ function update(dt: number) {
   }
   for (const d of drainDeliveries(g)) { const s = stationById(g, d.stationId); if (s) burstAt(s, d.n); }
   updateStationFx(g, dt);
+  updateMutationFx(g, dt);
   flash = Math.max(0, flash - dt * 1.5);
   for (const p of pops) { p.y -= 20 * dt; p.a -= dt * 0.8; }
   pops = pops.filter(p => p.a > 0);
