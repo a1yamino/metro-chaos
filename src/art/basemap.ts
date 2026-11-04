@@ -116,12 +116,13 @@ export function drawBasemap(ctx: CanvasRenderingContext2D, map: LevelMap, t: num
   }
   // 昼夜：180 秒一循环，t=0 白天；夜里整体淡淡发蓝，街区窗户/路灯亮起
   const night = 0.5 - 0.5 * Math.cos((t / DAY) * Math.PI * 2);
-  ctx.globalAlpha = 0.16 * night; ctx.fillStyle = P.night; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 0.62 * night; ctx.fillStyle = P.night; ctx.fillRect(0, 0, W, H);
   if (night > 0.45) {
     ctx.fillStyle = P.lamp;
     for (const [i, { x, y }] of cache.lamps.entries()) {
-      const on = (night - 0.45) * 1.8 - hash(i, 9) * 0.4; if (on <= 0) continue;
-      ctx.globalAlpha = Math.min(0.95, on * 1.5); ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+      const on = Math.min(1, (night - 0.45) * 2.5 - hash(i, 9) * 0.4); if (on <= 0) continue;
+      ctx.globalAlpha = 0.25 * on; ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fill(); // 光晕
+      ctx.globalAlpha = on; ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
     }
   }
   ctx.restore();

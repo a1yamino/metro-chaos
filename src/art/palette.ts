@@ -30,7 +30,7 @@ export const PALETTE = {
   foam: '#ffffff',
   boat: '#8a7a66',
   label: '#b4ab9b',
-  night: '#1e2a5a',
-  lamp: '#f2a93b',
+  night: '#141c33',
+  lamp: '#ffd27a',
   overlay: 'rgba(34,34,34,0.6)',
 } as const;
