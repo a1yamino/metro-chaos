@@ -10,12 +10,13 @@ import { PALETTE as P } from './art/palette';
 import { playBridge, playDeliver, playGameOver, playTunnel, playUpgrade, playWarning, unlockAudio, audioContext } from './audio/sfx';
 import { Music } from './audio/music';
 import { tensionOf } from './audio/tension';
-let music: Music | null = null;
-/** 首次用户手势后才开始背景音乐 */
-function startMusic() { const a = audioContext(); if (!a || music) return; music = new Music(a); music.start(); }
 import { pointAt, route, type Route } from './route';
 import { segmentCrossesWater } from './map/level1';
 import { addCarriage, connect, takeUpgrade, type Upgrade, createGame, drainDeliveries, drainSignals, segKey, segmentFlooded, stationById, stationFlooded, step, type Game, type Shape, type Station } from './sim';
+
+let music: Music | null = null;
+/** 首次用户手势后才开始背景音乐 */
+function startMusic() { const a = audioContext(); if (!a || music) return; music = new Music(a); music.start(); }
 
 const { width: W, height: H } = CONFIG;
 const cv = document.getElementById('c') as HTMLCanvasElement;
