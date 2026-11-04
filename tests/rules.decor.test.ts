@@ -23,6 +23,7 @@ function fakeCtx(hits: Hit[]) {
     },
     arc(x: number, y: number) { if (c.fillStyle === P.tree) hits.push({ kind: '树冠', p: { x, y } }); },
     fillText(s: string, x: number, y: number) { hits.push({ kind: `地名「${s}」`, p: { x, y } }); },
+    strokeText(s: string, x: number, y: number) { hits.push({ kind: `地名描边「${s}」`, p: { x, y } }); },
   };
   for (const m of ['scale', 'save', 'restore', 'beginPath', 'moveTo', 'lineTo', 'closePath', 'fill', 'stroke', 'clip', 'drawImage', 'translate', 'rotate', 'setLineDash'])
     c[m] = () => {};

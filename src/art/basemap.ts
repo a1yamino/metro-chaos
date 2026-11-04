@@ -83,9 +83,6 @@ function buildStatic(map: LevelMap, dpr: number) {
     let x = 190; while (x > 0 && x < W && isWater({ x, y })) x += dir;
     c.fillRect(Math.min(x, x - dir * 12), y - 2, 12, 4); c.fillRect(x - dir * 12 - 1.5, y - 6, 3, 12);
   }
-  // 地名：淡色小字，放在角落空地
-  c.fillStyle = P.label; c.font = '600 9px system-ui, sans-serif'; c.textAlign = 'center';
-  for (const [s, x, y] of [['河 港 城', 70, 40], ['西 岸 公 园', 75, 488], ['东 山', 330, 680], ['南 港', 300, 712], ['北 门', 330, 120]] as const) c.fillText(s, x, y);
   return { cv, lamps };
 }
 
@@ -125,5 +122,15 @@ export function drawBasemap(ctx: CanvasRenderingContext2D, map: LevelMap, t: num
       ctx.globalAlpha = on; ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
     }
   }
+  // 地名：画在夜色之上，白天淡色小字；入夜渐变为浅色并加深色描边，保证可读
+  ctx.globalAlpha = 1; ctx.font = '600 9px system-ui, sans-serif'; ctx.textAlign = 'center';
+  ctx.strokeStyle = P.labelHalo; ctx.lineWidth = 2.5;
+  for (const [s, x, y] of LABELS) {
+    if (night > 0.3) { ctx.globalAlpha = Math.min(1, (night - 0.3) * 2) * 0.8; ctx.strokeText(s, x, y); }
+    ctx.globalAlpha = 1 - night; ctx.fillStyle = P.label; ctx.fillText(s, x, y);
+    ctx.globalAlpha = night; ctx.fillStyle = P.labelNight; ctx.fillText(s, x, y);
+  }
   ctx.restore();
 }
+
+const LABELS = [['河 港 城', 70, 40], ['西 岸 公 园', 75, 488], ['东 山', 330, 680], ['南 港', 300, 712], ['北 门', 330, 120]] as const;
