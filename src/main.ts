@@ -7,7 +7,12 @@ import { drawTrain, resetTrainFx, smoothAngle } from './art/trains';
 import { CONFIG } from './config';
 import { LEVEL1 } from './map/level1';
 import { PALETTE as P } from './art/palette';
-import { playBridge, playDeliver, playGameOver, playTunnel, playUpgrade, playWarning, unlockAudio } from './audio/sfx';
+import { playBridge, playDeliver, playGameOver, playTunnel, playUpgrade, playWarning, unlockAudio, audioContext } from './audio/sfx';
+import { Music } from './audio/music';
+import { tensionOf } from './audio/tension';
+let music: Music | null = null;
+/** 首次用户手势后才开始背景音乐 */
+function startMusic() { const a = audioContext(); if (!a || music) return; music = new Music(a); music.start(); }
 import { pointAt, route, type Route } from './route';
 import { segmentCrossesWater } from './map/level1';
 import { addCarriage, connect, takeUpgrade, type Upgrade, createGame, drainDeliveries, drainSignals, segKey, segmentFlooded, stationById, stationFlooded, step, type Game, type Shape, type Station } from './sim';
@@ -236,7 +241,7 @@ function nearestLine(p: Pt): number | null {
 const inBtn = (p: Pt, b: { x: number; y: number; w: number; h: number }) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
 
 function down(e: MouseEvent | TouchEvent) {
-  e.preventDefault(); unlockAudio();
+  e.preventDefault(); unlockAudio(); startMusic();
   const p = pt(e);
   if (g.status !== 'playing') { if (inBtn(p, { x: W / 2 - 80, y: H / 2 + 110, w: 160, h: 50 })) restart(); return; }
   if (g.upgradeOffer) { g.upgradeChoices.forEach((u, i) => { if (inBtn(p, upgradeBtn(i)) && upgradeOk(u)) takeUpgrade(g, u); }); return; }
@@ -265,6 +270,6 @@ cv.addEventListener('mousedown', down); addEventListener('mousemove', move); add
 cv.addEventListener('touchstart', down, { passive: false }); cv.addEventListener('touchmove', move, { passive: false }); cv.addEventListener('touchend', up);
 
 let last = performance.now();
-function loop(now: number) { const dt = Math.min(0.05, (now - last) / 1000); last = now; update(dt); draw(); requestAnimationFrame(loop); }
+function loop(now: number) { const dt = Math.min(0.05, (now - last) / 1000); last = now; update(dt); music?.setTension(tensionOf(g)); draw(); requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
 (window as unknown as { __game: () => Game }).__game = () => g;
