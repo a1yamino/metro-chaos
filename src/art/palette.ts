@@ -21,8 +21,8 @@ export const PALETTE = {
   hill: '#e2d7c0',
   hillLine: '#cdbf9f',
   road: '#fdfcf9',      // 大路
-  roofs: ['#ebe6db', '#e6e0d3', '#e1dacb'], // 屋顶高低三档
-  roofShadow: '#ddd6c8',
+  roofs: ['#f1ede5', '#eeeae1', '#ebe6dc'], // 屋顶高低三档
+  roofShadow: '#e7e1d5',
   tree: '#b2d19f',
   treeDark: '#9fc48a',
   hillShade: '#d9cbb0',

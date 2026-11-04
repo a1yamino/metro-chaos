@@ -1,7 +1,7 @@
 import type { LevelMap, Poly, Pt } from '../map/types';
 import { isWater, pointInPolygon } from '../map/level1';
 import { PALETTE as P } from './palette';
-const W = 390, H = 844, G = 34, DAY = 180;
+const W = 390, H = 844, G = 48, DAY = 180;
 
 /** 底图：静态层（路网、屋顶、公园树冠、丘陵、海岸、码头、地名）缓存到离屏画布；
  *  波光、小船、浪花、昼夜色调、夜灯每帧按 t 画。全部低对比度，只做装饰。 */
@@ -73,11 +73,11 @@ function buildStatic(map: LevelMap, dpr: number) {
   c.strokeStyle = P.waterLine; c.lineWidth = 2; path(c, map.sea); c.stroke();
   path(c, map.river.center, false); c.strokeStyle = P.waterLine; c.lineWidth = map.river.width + 4; c.stroke();
   path(c, map.river.center, false); c.strokeStyle = P.water; c.lineWidth = map.river.width; c.stroke();
-  // 码头：沿海岸伸进海里的几道栈桥
+  // 码头：河口两岸伸进河里的栈桥（教程条之上可见）
   c.fillStyle = P.pier;
-  for (const px of [40, 120, 300, 350]) {
-    let y = 700; while (y < 800 && !pointInPolygon({ x: px, y }, map.sea)) y++;
-    c.fillRect(px - 3, y - 4, 6, 26); c.fillRect(px - 9, y + 18, 18, 5);
+  for (const [y, dir] of [[640, -1], [690, -1], [665, 1], [710, 1]] as const) {
+    let x = 190; while (x > 0 && x < W && isWater({ x, y })) x += dir;
+    c.fillRect(Math.min(x, x - dir * 12), y - 2, 12, 4); c.fillRect(x - dir * 12 - 1.5, y - 6, 3, 12);
   }
   // 地名：淡色小字，放在角落空地
   c.fillStyle = P.label; c.font = '600 9px system-ui, sans-serif'; c.textAlign = 'center';
@@ -101,6 +101,7 @@ export function drawBasemap(ctx: CanvasRenderingContext2D, map: LevelMap, t: num
   ctx.setLineDash([6, 14]); ctx.lineDashOffset = Math.sin(t * 0.8) * 8; ctx.strokeStyle = P.foam;
   ctx.globalAlpha = 0.7; ctx.lineWidth = 1.5;
   path(ctx, map.sea.slice(0, 5).map(({ x, y }) => ({ x, y: y + 5 + Math.sin(t * 1.2 + x * 0.05) * 1.5 })), false); ctx.stroke();
+  for (const y of [790, 815]) { path(ctx, [{ x: 0, y }, { x: W, y: y + Math.sin(t * 0.6) * 2 }], false); ctx.stroke(); }
   ctx.setLineDash([]); ctx.globalAlpha = 1;
   // 小船：沿河中心线慢慢顺流漂下（约 70 秒一趟）
   for (const ph of [0, 0.5]) {
@@ -116,7 +117,7 @@ export function drawBasemap(ctx: CanvasRenderingContext2D, map: LevelMap, t: num
     ctx.fillStyle = P.lamp;
     for (const [i, { x, y }] of cache.lamps.entries()) {
       const on = (night - 0.45) * 1.8 - hash(i, 9) * 0.4; if (on <= 0) continue;
-      ctx.globalAlpha = Math.min(0.8, on); ctx.fillRect(x - 1, y - 1, 2, 2);
+      ctx.globalAlpha = Math.min(0.95, on * 1.5); ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
     }
   }
   ctx.restore();
