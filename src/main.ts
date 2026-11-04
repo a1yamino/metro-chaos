@@ -1,5 +1,6 @@
 import { drawBasemap } from './art/basemap';
 import { drawCrossing } from './art/crossing';
+import { drawParticles, drawPopRing, stationPose, updateStationFx } from './art/stations';
 import { CONFIG } from './config';
 import { LEVEL1 } from './map/level1';
 import { PALETTE as P } from './art/palette';
@@ -115,9 +116,12 @@ function draw() {
       ctx.strokeStyle = off ? P.flood : P.danger; ctx.lineWidth = 5; ctx.beginPath();
       ctx.arc(s.x, s.y, 21, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * s.crowdTime / CONFIG.crowdFailSeconds); ctx.stroke();
     }
-    shape(s.x, s.y, s.shape, CONFIG.stationRadius, off ? '#cfe0f5' : P.white, off ? P.floodDeep : P.ink);
+    const ps = stationPose(s, g.t), sx = s.x + ps.dx, sy = s.y + ps.dy;
+    drawPopRing(ctx, s.x, s.y, ps.ring);
+    shape(sx, sy, s.shape, CONFIG.stationRadius * ps.k, off ? '#cfe0f5' : P.white, off ? P.floodDeep : P.ink);
     s.queue.forEach((p, k) => shape(s.x + 18 + (k % 6) * 9, s.y - 8 + Math.floor(k / 6) * 9, p, 3.5, off ? P.flood : s.queue.length > CONFIG.crowdLimit ? P.danger : P.ink));
   }
+  drawParticles(ctx);
   for (const p of pops) { ctx.globalAlpha = Math.max(0, p.a); text(p.text, p.x, p.y, 'bold 16px sans-serif', p.color); ctx.globalAlpha = 1; }
 
   // HUD
@@ -172,6 +176,7 @@ function drawResults() {
 
 function update(dt: number) {
   if (!g.upgradeOffer) step(g, dt); // 选升级时暂停
+  updateStationFx(g, dt);
   for (const s of drainSignals(g)) {
     if (s === 'deliver') playDeliver();
     else if (s === 'warning') playWarning();
