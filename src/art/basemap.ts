@@ -1,5 +1,5 @@
 import type { LevelMap, Poly, Pt } from '../map/types';
-import { isWater, pointInPolygon } from '../map/level1';
+import { distToRiver, isWater, pointInPolygon } from '../map/level1';
 import { PALETTE as P } from './palette';
 const W = 390, H = 844, G = 48, DAY = 180;
 
@@ -46,7 +46,7 @@ function buildStatic(map: LevelMap, dpr: number) {
   c.fillStyle = P.road;
   for (let x = 0; x < W; x += G * 4) c.fillRect(x - 3, 0, 7, H);
   for (let y = 0; y < H; y += G * 4) c.fillRect(0, y - 3, W, 7);
-  for (let x = 0; x < W; x += G * 4) for (let y = 17; y < H; y += G) if (!busy({ x, y })) lamps.push({ x, y });
+  for (let x = 0; x < W; x += G * 4) for (let y = 17; y < H; y += G) if (!busy({ x, y }) && distToRiver({ x, y }) > map.river.width && !pointInPolygon({ x, y: y + 12 }, map.sea)) lamps.push({ x, y });
   // 丘陵：由外到内逐层加深的等高线阴影（偏东南，像受西北光）
   for (const hl of map.hills) {
     const o = centroid(hl);
