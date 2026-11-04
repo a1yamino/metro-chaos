@@ -12,6 +12,7 @@ export default defineConfig({
         trains: resolve(import.meta.dirname, 'demo/trains.html'),
         mutations: resolve(import.meta.dirname, 'demo/mutations.html'),
         labels: resolve(import.meta.dirname, 'demo/labels.html'),
+        music: resolve(import.meta.dirname, 'demo/music.html'),
       },
     },
   },

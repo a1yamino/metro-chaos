@@ -1,0 +1,40 @@
+<!doctype html><meta charset="utf-8"><title>C11 自适应背景音乐 试听</title>
+<meta name="viewport" content="width=device-width">
+<style>
+body{margin:0;background:#f4f1ea;font:14px sans-serif;color:#2b2b2b;display:flex;justify-content:center}
+main{width:360px;padding:24px}h1{font-size:18px;margin:0 0 4px}p{color:#777;margin:0 0 18px}
+button{font:inherit;padding:8px 14px;border:2px solid #2b2b2b;border-radius:8px;background:#fff;margin-right:6px}
+button.on{background:#2b2b2b;color:#fff}input{width:100%}
+.row{display:flex;align-items:center;gap:8px;margin:6px 0}.row b{width:52px;white-space:nowrap}.bar{flex:1;height:12px;background:#e4dfd4;border-radius:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:#3a7bd5;width:0}.row span{width:36px;text-align:right;font-variant-numeric:tabular-nums}
+#tv{font-size:28px;font-weight:bold}
+</style>
+<main>
+<h1>METRO CHAOS · 背景音乐</h1><p>WebAudio 实时合成。紧张度越高，层越多、越亮。</p>
+<div class="row"><button id="play">▶ 播放</button><button id="sweep">自动扫一遍</button></div>
+<div class="row" style="margin-top:18px"><b>紧张度</b><input id="t" type="range" min="0" max="1" step="0.01" value="0"><span id="tv">0.00</span></div>
+<div id="meters" style="margin-top:14px"></div>
+</main>
+<script type="module">
+import { Music, LAYERS } from '../src/audio/music';
+const NAME = { pad: '铺底', arp: '琶音', bass: '低音', hats: '沙锤', high: '高音' };
+const $ = id => document.getElementById(id), slider = $('t');
+$('meters').innerHTML = LAYERS.map(k => `<div class="row"><b>${NAME[k]}</b><div class="bar"><i id="m-${k}"></i></div><span id="v-${k}">0%</span></div>`).join('');
+let ac = null, music = null, playing = false, sweep = null;
+const set = v => { slider.value = v; $('tv').textContent = (+v).toFixed(2); music?.setTension(+v); };
+slider.oninput = () => { sweep = null; $('sweep').classList.remove('on'); set(slider.value); };
+$('play').onclick = () => { // 只在用户点击后创建/恢复 AudioContext
+  ac ??= new AudioContext(); void ac.resume();
+  if (!music) { music = new Music(ac); music.setTension(+slider.value, true); }
+  playing = !playing;
+  if (playing) { music.resumeOut(); music.start(); } else music.stop();
+  $('play').textContent = playing ? '■ 停止' : '▶ 播放'; $('play').classList.toggle('on', playing);
+};
+$('sweep').onclick = () => { sweep = sweep ? null : performance.now(); $('sweep').classList.toggle('on', !!sweep); };
+const lv = window.__levels = () => music ? music.level : Object.fromEntries(LAYERS.map(k => [k, 0]));
+(function tick(now) {
+  if (sweep) set((1 - Math.cos((now - sweep) / 20000 * Math.PI * 2)) / 2); // 20 秒 0→1→0
+  const l = lv(); for (const k of LAYERS) { $('m-' + k).style.width = (l[k] * 100).toFixed(0) + '%'; $('v-' + k).textContent = (l[k] * 100).toFixed(0) + '%'; }
+  requestAnimationFrame(tick);
+})(performance.now());
+</script>

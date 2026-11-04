@@ -17,6 +17,8 @@ function tone(freq: number, delay: number, dur: number, { type = 'square', vol =
   o.connect(g).connect(a.destination); o.start(t0); o.stop(t0 + dur + 0.02);
 }
 export const unlockAudio = () => { void ac()?.resume(); };
+/** 共用同一个 AudioContext（背景音乐用） */
+export const audioContext = ac;
 /** 送达：短促上行双音，频繁触发也不吵 */
 export function playDeliver() {
   tone(880, 0, 0.06, { type: 'triangle', vol: 0.12 });
