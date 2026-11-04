@@ -3,6 +3,7 @@ export const CONFIG = {
   width: 390,
   height: 844,
   riverWidth: 34, // 第一关河道宽度（像素）
+  routeCornerRadius: 22, // 地铁图折线拐角圆弧半径（像素）
   stationRiverMargin: 34 / 2 + 18, // 站点中心离河道中心线的最小距离
   stationEdgeMargin: 40, // 站点离棋盘左右/底边的最小距离（顶部另避开 HUD）
   stationSpawnAttempts: 200, // 随机采样次数，失败后按网格确定性兜底
