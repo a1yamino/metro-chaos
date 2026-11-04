@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Pt } from '../src/map/types';
 import { LEVEL1, isWater } from '../src/map/level1';
 import { PALETTE as P } from '../src/art/palette';
-import { drawBasemap } from '../src/art/basemap';
+import { LABELS, drawBasemap } from '../src/art/basemap';
 
 type Hit = { kind: string; p: Pt };
 
@@ -39,5 +39,12 @@ describe('规则：装饰物不落水', () => {
     for (const k of ['路灯', '屋顶', '树冠']) expect(hits.some((h) => h.kind === k), `没采到${k}，假 context 可能跟不上 basemap 的画法`).toBe(true);
     const wet = hits.filter((h) => isWater(h.p)).map((h) => `${h.kind}@(${h.p.x.toFixed(1)},${h.p.y.toFixed(1)})`);
     expect(wet, `这些装饰物落在水上：${wet.join(' ')}。正确做法：在 src/art/basemap.ts 的摆放条件里排除 isWater 的位置`).toEqual([]);
+  });
+});
+
+describe('规则：地名的每个备选锚点都在干地上', () => {
+  it('躲站点/线路换位时也不会把地名挪到水上', () => {
+    for (const [s, cands] of LABELS) for (const [x, y] of cands)
+      expect(isWater({ x, y }), `地名「${s}」的备选锚点 (${x},${y}) 在水上。正确做法：在 src/art/basemap.ts 的 LABELS 里换一个干地上的点`).toBe(false);
   });
 });

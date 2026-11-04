@@ -86,7 +86,11 @@ function buildStatic(map: LevelMap, dpr: number) {
   return { cv, lamps };
 }
 
-export function drawBasemap(ctx: CanvasRenderingContext2D, map: LevelMap, t: number) {
+/** 地名要躲开的东西：站点中心、线路线段（渲染层传入，只读）。 */
+export interface LabelAvoid { stations: readonly Pt[]; segs: readonly (readonly [Pt, Pt])[] }
+const NO_AVOID: LabelAvoid = { stations: [], segs: [] };
+
+export function drawBasemap(ctx: CanvasRenderingContext2D, map: LevelMap, t: number, avoid: LabelAvoid = NO_AVOID) {
   const dpr = ctx.getTransform().a || 1;
   if (!cache || cache.map !== map || cache.dpr !== dpr) cache = { map, dpr, ...buildStatic(map, dpr) };
   ctx.drawImage(cache.cv, 0, 0, W, H);
@@ -125,7 +129,7 @@ export function drawBasemap(ctx: CanvasRenderingContext2D, map: LevelMap, t: num
   // 地名：画在夜色之上，白天淡色小字；入夜渐变为浅色并加深色描边，保证可读
   ctx.globalAlpha = 1; ctx.font = '600 9px system-ui, sans-serif'; ctx.textAlign = 'center';
   ctx.strokeStyle = P.labelHalo; ctx.lineWidth = 2.5;
-  for (const [s, x, y] of LABELS) {
+  for (const [s, x, y] of LABELS.map((l) => placeLabel(l, avoid))) {
     if (night > 0.3) { ctx.globalAlpha = Math.min(1, (night - 0.3) * 2) * 0.8; ctx.strokeText(s, x, y); }
     ctx.globalAlpha = 1 - night; ctx.fillStyle = P.label; ctx.fillText(s, x, y);
     ctx.globalAlpha = night; ctx.fillStyle = P.labelNight; ctx.fillText(s, x, y);
@@ -133,4 +137,29 @@ export function drawBasemap(ctx: CanvasRenderingContext2D, map: LevelMap, t: num
   ctx.restore();
 }
 
-const LABELS = [['河 港 城', 70, 40], ['西 岸 公 园', 75, 488], ['东 山', 330, 680], ['南 港', 300, 712], ['北 门', 330, 120]] as const;
+/** 地名与候选锚点（按优先级）。第一个是默认位置；被站点或线路压住时换下一个，全被压住就用压得最少的。
+ *  候选点都在干地上（rules.decor 检查）。「河港城」放在顶栏和预警条（y<98）下面。 */
+export const LABELS: readonly (readonly [string, readonly (readonly [number, number])[]])[] = [
+  ['河 港 城', [[70, 122], [70, 160], [120, 122], [30, 150]]],
+  ['西 岸 公 园', [[75, 488], [75, 362], [140, 488], [140, 362], [75, 422], [95, 520]]],
+  ['东 山', [[330, 680], [330, 538], [300, 600]]],
+  ['南 港', [[300, 712], [100, 712], [350, 712]]],
+  ['北 门', [[330, 120], [330, 160], [290, 120]]],
+];
+/** 文字框（9px 字，中文约 9px、空格约 3px）与站点/线段的重叠量；0 表示完全没压住 */
+function overlap(s: string, x: number, y: number, a: LabelAvoid) {
+  const hw = [...s].reduce((w, ch) => w + (ch === ' ' ? 3 : 9), 0) / 2 + 4, l = x - hw, r = x + hw, top = y - 12, bot = y + 4;
+  const near = (p: Pt, m: number) => p.x > l - m && p.x < r + m && p.y > top - m && p.y < bot + m;
+  let n = 0;
+  for (const st of a.stations) if (near(st, 16)) n += 4;
+  for (const [p, q] of a.segs) {
+    const k = Math.max(1, Math.ceil(Math.hypot(q.x - p.x, q.y - p.y) / 4));
+    for (let i = 0; i <= k; i++) if (near({ x: p.x + ((q.x - p.x) * i) / k, y: p.y + ((q.y - p.y) * i) / k }, 5)) { n++; break; }
+  }
+  return n;
+}
+function placeLabel([s, cands]: (typeof LABELS)[number], a: LabelAvoid): readonly [string, number, number] {
+  let best = cands[0], bn = Infinity;
+  for (const c of cands) { const n = overlap(s, c[0], c[1], a); if (n < bn) { bn = n; best = c; } if (!n) break; }
+  return [s, best[0], best[1]];
+}

@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>B10 地名避让 演示</title>
+<style>body{margin:0;background:#f4f1ea}</style>
+<canvas id="c" width="390" height="844"></canvas>
+<script type="module">
+// 仅演示页：复现「西岸公园」被站点和蓝线压住的局面。?avoid=0 关掉避让（等于 B10 之前的画法），?t=秒 底图时间（90 为最深夜）
+import { drawBasemap } from '../src/art/basemap';
+import { PALETTE as P } from '../src/art/palette';
+import { LEVEL1 } from '../src/map/level1';
+const q = new URLSearchParams(location.search), T = +(q.get('t') || 0), on = q.get('avoid') !== '0';
+const ctx = document.getElementById('c').getContext('2d');
+const st = [{ x: 70, y: 300 }, { x: 70, y: 488 }, { x: 150, y: 560 }], segs = [[st[0], st[1]], [st[1], st[2]]];
+drawBasemap(ctx, LEVEL1, T, on ? { stations: st, segs } : undefined);
+ctx.lineCap = 'round'; ctx.strokeStyle = P.lines[1]; ctx.lineWidth = 7; ctx.beginPath(); st.forEach((s, i) => i ? ctx.lineTo(s.x, s.y) : ctx.moveTo(s.x, s.y)); ctx.stroke();
+for (const s of st) { ctx.beginPath(); ctx.arc(s.x, s.y, 13, 0, 7); ctx.fillStyle = P.white; ctx.fill(); ctx.strokeStyle = P.ink; ctx.lineWidth = 3; ctx.stroke(); }
+</script>

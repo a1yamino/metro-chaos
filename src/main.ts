@@ -1,4 +1,5 @@
-import { drawBasemap } from './art/basemap';
+import { drawBasemap, type LabelAvoid } from './art/basemap';
+import { cardEnter, drawIcon, roundRect } from './art/ui';
 import { drawCrossing } from './art/crossing';
 import { burstAt, drawParticles, drawPopRing, stationPose, updateStationFx } from './art/stations';
 import { drawMutationsOver, drawMutationsUnder, updateMutationFx } from './art/mutations';
@@ -72,8 +73,11 @@ function strokeRoute(r: Route) {
 }
 
 let lastTrainT = 0;
+let offerAge = 0, lastDraw = performance.now();
 function draw() {
-  drawBasemap(ctx, LEVEL1, g.t);
+  const now = performance.now(); offerAge = g.upgradeOffer ? offerAge + Math.min(0.25, (now - lastDraw) / 1000) : 0; lastDraw = now;
+  const avoid: LabelAvoid = { stations: g.stations, segs: g.lines.flatMap(l => l.stops.slice(1).flatMap((id, i) => route(stationById(g, l.stops[i])!, stationById(g, id)!).legs.map(lg => [lg.a, lg.b] as const))) };
+  drawBasemap(ctx, LEVEL1, g.t, avoid);
   drawMutationsUnder(ctx, g);
   const w = g.warning;
   ctx.lineCap = ctx.lineJoin = 'round';
@@ -120,11 +124,15 @@ function draw() {
   for (const p of pops) { ctx.globalAlpha = Math.max(0, p.a); text(p.text, p.x, p.y, 'bold 16px sans-serif', p.color); ctx.globalAlpha = 1; }
 
   // HUD
-  ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fillRect(0, 0, W, 64);
-  text(`🚇 ${g.delivered}`, 16, 40, 'bold 22px sans-serif', P.ink, 'left');
-  text(`最高 ${best} · ${fmtTime(g.t)} · 🌉${g.bridges} 🚇${g.tunnels}`, 16, 58, '12px sans-serif', P.muted, 'left');
-  text(`下个突变 ${Math.ceil(g.eventTimer)}s`, W - 16, 28, '14px sans-serif', P.ink, 'right');
-  text(`线路 ${g.lines.length}/${g.maxLines}`, W - 16, 48, '14px sans-serif', P.ink, 'right');
+  ctx.globalAlpha = 0.94; ctx.fillStyle = P.white; ctx.fillRect(0, 0, W, 64); ctx.globalAlpha = 1;
+  ctx.fillStyle = P.hillLine; ctx.fillRect(0, 63, W, 1);
+  drawIcon(ctx, 'rider', 16, 20, P.ink); text(`${g.delivered}`, 36, 34, 'bold 22px sans-serif', P.ink, 'left');
+  const chips: [Parameters<typeof drawIcon>[1], string][] = [['trophy', `${best}`], ['clock', fmtTime(g.t)], ['bridge', `${g.bridges}`], ['tunnel', `${g.tunnels}`]];
+  let cx = 16;
+  for (const [ic, v] of chips) { drawIcon(ctx, ic, cx, 45, P.muted); text(v, cx + 18, 57, '12px sans-serif', P.muted, 'left'); ctx.font = '12px sans-serif'; cx += 30 + ctx.measureText(v).width; }
+  const soon = !w && g.eventTimer <= 10;
+  drawIcon(ctx, 'warn', W - 64, 15, soon ? P.warning : P.ink); text(`${Math.ceil(g.eventTimer)}s`, W - 16, 28, 'bold 14px sans-serif', P.ink, 'right');
+  drawIcon(ctx, 'lines', W - 64, 36, P.ink); text(`${g.lines.length}/${g.maxLines}`, W - 16, 48, 'bold 14px sans-serif', P.ink, 'right');
   const active = g.events[0];
   const banner = w ? `⚠ ${EV_LABEL[w.type]} ${Math.ceil(g.eventTimer)}s` : active ? `${EV_LABEL[active.type]} ${Math.ceil(active.left)}s` : null;
   if (banner) { ctx.fillStyle = w ? P.warning : P.floodDeep; ctx.fillRect(0, 64, W, 34); text(banner, W / 2, 87, 'bold 16px sans-serif', P.white); }
@@ -145,28 +153,46 @@ function draw() {
 const fmtTime = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 const upgradeOk = (u: Upgrade) => u !== 'line' || g.maxLines < CONFIG.maxLinesCap;
 function drawUpgrades() {
-  ctx.fillStyle = P.overlay; ctx.fillRect(0, 0, W, H);
+  const [, fade] = cardEnter(offerAge, 0);
+  ctx.globalAlpha = Math.min(1, fade * 1.5); ctx.fillStyle = P.overlay; ctx.fillRect(0, 0, W, H);
   text('选一个升级', W / 2, 260, 'bold 26px sans-serif', P.white);
   g.upgradeChoices.forEach((u, i) => {
-    const b = upgradeBtn(i), ok = upgradeOk(u);
-    ctx.globalAlpha = ok ? 1 : 0.4; ctx.fillStyle = P.white; ctx.fillRect(b.x, b.y, b.w, b.h);
+    const b = upgradeBtn(i), ok = upgradeOk(u), [dy, a] = cardEnter(offerAge, i + 1);
+    ctx.save(); ctx.translate(0, dy); ctx.globalAlpha = a * (ok ? 1 : 0.4);
+    ctx.fillStyle = P.roofShadow; roundRect(ctx, b.x + 2, b.y + 3, b.w, b.h, 12); ctx.fill();
+    ctx.fillStyle = P.white; roundRect(ctx, b.x, b.y, b.w, b.h, 12); ctx.fill();
+    ctx.fillStyle = P.lines[i % P.lines.length]; roundRect(ctx, b.x, b.y, 6, b.h, 3); ctx.fill();
     text(UP_LABEL[u], b.x + 20, b.y + 32, 'bold 20px sans-serif', P.ink, 'left');
     text(ok ? UP_DESC[u] : '线路已达上限', b.x + 20, b.y + 56, '14px sans-serif', P.muted, 'left');
-    ctx.globalAlpha = 1;
+    ctx.restore();
   });
+  ctx.globalAlpha = 1;
 }
 
+/** 结算页：分享卡片样式。重新开始按钮位置不变（点击判定在 down() 里）。 */
 function drawResults() {
   ctx.fillStyle = P.overlay; ctx.fillRect(0, 0, W, H);
-  text('站点瘫痪', W / 2, H / 2 - 150, 'bold 34px sans-serif', P.white);
-  text(`${g.delivered} 分`, W / 2, H / 2 - 100, 'bold 30px sans-serif', P.white);
-  text(`存活 ${fmtTime(g.t)} · 最高 ${best}${newBest ? ' 🎉 新纪录' : ''}`, W / 2, H / 2 - 60, '18px sans-serif', P.white);
+  const x = 28, y = H / 2 - 230, w = W - 56, h = 410;
+  ctx.fillStyle = P.night; roundRect(ctx, x + 3, y + 5, w, h, 18); ctx.globalAlpha = 0.35; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.fillStyle = P.bg; roundRect(ctx, x, y, w, h, 18); ctx.fill();
+  ctx.save(); roundRect(ctx, x, y, w, h, 18); ctx.clip();
+  P.lines.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(x + (w / P.lines.length) * i, y, w / P.lines.length + 1, 8); });
+  ctx.restore();
+  text('METRO CHAOS · 河港城', W / 2, y + 40, 'bold 13px sans-serif', P.muted);
+  text('站点瘫痪', W / 2, y + 74, 'bold 22px sans-serif', P.danger);
+  text(`${g.delivered}`, W / 2, y + 140, 'bold 64px sans-serif', P.ink);
+  text('位乘客送达', W / 2, y + 164, '14px sans-serif', P.muted);
+  text(`存活 ${fmtTime(g.t)} · 最高 ${best}`, W / 2, y + 194, '15px sans-serif', P.ink);
+  if (newBest) { ctx.fillStyle = P.warning; roundRect(ctx, W / 2 - 44, y + 204, 88, 22, 11); ctx.fill(); text('新纪录', W / 2, y + 220, 'bold 13px sans-serif', P.ink); }
   const counts = g.eventLog.reduce<Record<string, number>>((m, e) => ((m[e] = (m[e] ?? 0) + 1), m), {});
   const evs = (Object.keys(EV_LABEL) as (keyof typeof EV_LABEL)[]).filter(k => counts[k]).map(k => `${EV_LABEL[k]} ×${counts[k]}`);
-  text('经历的突变', W / 2, H / 2 - 16, '16px sans-serif', '#ccc');
-  (evs.length ? evs : ['无']).forEach((e, i) => text(e, W / 2, H / 2 + 12 + i * 24, '17px sans-serif', P.white));
-  ctx.fillStyle = P.white; ctx.fillRect(W / 2 - 80, H / 2 + 110, 160, 50);
-  text('重新开始', W / 2, H / 2 + 142, 'bold 18px sans-serif', P.ink);
+  text('经历的突变', W / 2, y + 252, '13px sans-serif', P.muted);
+  ctx.font = '14px sans-serif';
+  const items = evs.length ? evs : ['无'], ws = items.map(e => ctx.measureText(e).width + 20), tot = ws.reduce((a, b) => a + b, 0) + (items.length - 1) * 6;
+  let cx = W / 2 - tot / 2;
+  items.forEach((e, i) => { ctx.fillStyle = P.white; roundRect(ctx, cx, y + 262, ws[i], 26, 13); ctx.fill(); text(e, cx + ws[i] / 2, y + 280, '14px sans-serif', P.ink); cx += ws[i] + 6; });
+  ctx.fillStyle = P.ink; roundRect(ctx, W / 2 - 80, H / 2 + 110, 160, 50, 25); ctx.fill();
+  text('重新开始', W / 2, H / 2 + 142, 'bold 18px sans-serif', P.white);
 }
 
 function update(dt: number) {
