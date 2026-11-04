@@ -8,6 +8,7 @@ export default defineConfig({
       input: {
         main: resolve(import.meta.dirname, 'index.html'),
         crossings: resolve(import.meta.dirname, 'demo/crossings.html'),
+        stations: resolve(import.meta.dirname, 'demo/stations.html'),
       },
     },
   },
