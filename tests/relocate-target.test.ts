@@ -31,19 +31,16 @@ describe('RELOCATE 预警里带目标点', () => {
     expect(hits).toBeGreaterThan(0);
   });
 
-  it('预警期间目标点失效（被洪水淹）→ 确定性重新找点，且新点合法', () => {
-    const run = () => {
-      const r = untilRelocateWarning(7)!;
-      const { g, w } = r;
-      g.events.push({ type: 'FLOOD', x: w.tx, y: w.ty, r: g.cfg.flood.radius, left: 1e9 });
-      const old = { x: w.tx, y: w.ty };
-      fire(g);
-      const s = stationById(g, w.stationId)!;
-      return { old, to: { x: s.tx, y: s.ty }, ok: stationSpotOk(g.cfg, s.tx, s.ty) };
-    };
-    const a = run(), b = run();
-    expect(a.to).not.toEqual(a.old);
-    expect(a.ok).toBe(true);
-    expect(b).toEqual(a);
+  it('预警期间目标点失效（被洪水淹）→ 取消搬迁：预警清掉、站点不动、tx/ty 不改写', () => {
+    const { g, w } = untilRelocateWarning(7)!;
+    const s = stationById(g, w.stationId)!;
+    const warned = { tx: w.tx, ty: w.ty }, before = { tx: s.tx, ty: s.ty };
+    g.events.push({ type: 'FLOOD', x: w.tx, y: w.ty, r: g.cfg.flood.radius, left: 1e9 });
+    const n = g.eventLog.length;
+    fire(g);
+    expect(g.eventLog.length).toBe(n + 1);
+    expect(g.warning).toBeNull();
+    expect({ tx: s.tx, ty: s.ty }).toEqual(before);
+    expect({ tx: w.tx, ty: w.ty }).toEqual(warned);
   });
 });

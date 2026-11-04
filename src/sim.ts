@@ -12,7 +12,7 @@ export interface Train { seg: number; f: number; dir: 1 | -1; cargo: Shape[]; ca
 export interface Line { id: number; stops: number[]; train: Train }
 export type GameEvent =
   | { type: 'FLOOD'; x: number; y: number; r: number; left: number }
-  /** tx/ty：抽到预警时就定好的目标点，startEvent 原样使用（失效时见 startEvent） */
+  /** tx/ty：抽预警时定好的目标点，startEvent 原样使用；触发时失效则取消搬迁（见 startEvent） */
   | { type: 'RELOCATE'; stationId: number; tx: number; ty: number; left: number }
   | { type: 'RUSH'; stationId: number; left: number };
 export type Status = 'playing' | 'lost';
@@ -169,9 +169,8 @@ function startEvent(g: Game, e: GameEvent) {
   if (e.type === 'RELOCATE') {
     const s = stationById(g, e.stationId);
     if (!s) return;
-    // 预警期间目标点可能失效（被洪水淹、旁边新开了站）：失效才重新找点（确定性），找不到就原地不动
-    const p = spotFree(g, e.tx, e.ty, s) ? { x: e.tx, y: e.ty } : freeSpot(g, s) ?? { x: s.tx, y: s.ty };
-    e.tx = p.x; e.ty = p.y; s.tx = p.x; s.ty = p.y;
+    // 预警期间目标点可能失效（被洪水淹、旁边新开了站）：失效就取消这次搬迁，站点不动；预警照常由 step 清掉。e.tx/ty 永不改写
+    if (spotFree(g, e.tx, e.ty, s)) { s.tx = e.tx; s.ty = e.ty; }
     return;
   }
   if (e.type === 'RUSH') { const s = stationById(g, e.stationId); if (s) s.rush = true; }
