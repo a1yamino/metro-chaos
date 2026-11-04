@@ -31,6 +31,6 @@ export const PALETTE = {
   boat: '#8a7a66',
   label: '#b4ab9b',
   night: '#1e2a5a',
-  lamp: '#ffd98a',
+  lamp: '#f2a93b',
   overlay: 'rgba(34,34,34,0.6)',
 } as const;
