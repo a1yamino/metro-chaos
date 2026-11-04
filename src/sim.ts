@@ -16,6 +16,8 @@ export type GameEvent =
   | { type: 'RUSH'; stationId: number; left: number };
 export type Status = 'playing' | 'lost';
 export type SimSignal = 'deliver' | 'warning' | 'eventStart' | 'lost' | 'upgradeOffer' | 'upgradeTaken' | 'needCrossing';
+/** 只读的送达事件：某次停靠时在 stationId 站真正下车的乘客数（n>0）。渲染层用 drainDeliveries 读取。 */
+export interface Delivered { readonly stationId: number; readonly n: number }
 export type Upgrade = 'carriage' | 'line' | 'bridge' | 'tunnel';
 export const UPGRADES: readonly Upgrade[] = ['carriage', 'line', 'bridge', 'tunnel'];
 
@@ -26,7 +28,7 @@ export interface Game {
   delivered: number; upgradesGiven: number; upgradeOffer: boolean;
   maxLines: number; carriages: number; bridges: number; bridged: Set<string>; tunnels: number; tunneled: Set<string>;
   upgradeChoices: Upgrade[];
-  eventLog: EventType[]; nextId: number; signals: SimSignal[];
+  eventLog: EventType[]; nextId: number; signals: SimSignal[]; deliveries: Delivered[];
 }
 
 export function createGame(seed = Date.now(), cfg: Config = CONFIG): Game {
@@ -34,7 +36,7 @@ export function createGame(seed = Date.now(), cfg: Config = CONFIG): Game {
     cfg, rng: makeRng(seed), placeRng: makeRng(seed ^ 0x9e3779b9), t: 0, status: 'playing', stations: [], lines: [], events: [],
     warning: null, eventTimer: cfg.eventInterval.start, stationTimer: cfg.stationSpawn.start,
     delivered: 0, upgradesGiven: 0, upgradeOffer: false,
-    maxLines: cfg.startLines, carriages: 0, bridges: cfg.startBridges, bridged: new Set(), tunnels: cfg.startTunnels, tunneled: new Set(), upgradeChoices: [], eventLog: [], nextId: 0, signals: [],
+    maxLines: cfg.startLines, carriages: 0, bridges: cfg.startBridges, bridged: new Set(), tunnels: cfg.startTunnels, tunneled: new Set(), upgradeChoices: [], eventLog: [], nextId: 0, signals: [], deliveries: [],
   };
   for (let i = 0; i < cfg.initialStations; i++) addStation(g, SHAPES[i % SHAPES.length]);
   return g;
@@ -174,7 +176,7 @@ function arrive(g: Game, t: Train, s: Station, stops: Station[]) {
   const before = t.cargo.length;
   t.cargo = t.cargo.filter(p => p !== s.shape);
   const n = before - t.cargo.length;
-  if (n) { g.delivered += n; g.signals.push('deliver'); }
+  if (n) { g.delivered += n; g.signals.push('deliver'); g.deliveries.push({ stationId: s.id, n }); }
   const reach = new Set(stops.filter(o => o !== s).map(o => o.shape));
   s.queue = s.queue.filter(p => {
     if (t.cargo.length < t.capacity && reach.has(p)) { t.cargo.push(p); return false; }
@@ -254,4 +256,6 @@ export function step(g: Game, dt: number): void {
 }
 
 /** 取出并清空本帧信号（给音效/特效用）。 */
+/** 取走并清空本帧累积的送达事件（按发生顺序）。 */
+export function drainDeliveries(g: Game): Delivered[] { const d = g.deliveries; g.deliveries = []; return d; }
 export function drainSignals(g: Game): SimSignal[] { const s = g.signals; g.signals = []; return s; }
