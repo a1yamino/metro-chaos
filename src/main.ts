@@ -1,6 +1,7 @@
 import { drawBasemap } from './art/basemap';
 import { drawCrossing } from './art/crossing';
 import { burstAt, drawParticles, drawPopRing, stationPose, updateStationFx } from './art/stations';
+import { drawTrain, resetTrainFx, smoothAngle } from './art/trains';
 import { CONFIG } from './config';
 import { LEVEL1 } from './map/level1';
 import { PALETTE as P } from './art/palette';
@@ -37,7 +38,7 @@ const UP_DESC: Record<Upgrade, string> = { carriage: '一条线载客 +6', line:
 const upgradeBtn = (i: number) => ({ x: 30, y: 300 + i * 90, w: W - 60, h: 74 });
 const EV_LABEL = { FLOOD: '🌊 洪水', RELOCATE: '🏗 站点搬迁', RUSH: '👥 客流暴增' } as const;
 
-function restart() { g = createGame(Date.now()); pops = []; drag = null; placingCarriage = false; newBest = false; }
+function restart() { g = createGame(Date.now()); pops = []; resetTrainFx(); drag = null; placingCarriage = false; newBest = false; }
 
 function shape(x: number, y: number, sh: Shape, r: number, fill?: string, stroke?: string, lw = 3) {
   ctx.beginPath();
@@ -69,6 +70,7 @@ function strokeRoute(r: Route) {
   ctx.lineTo(b.x, b.y); ctx.stroke();
 }
 
+let lastTrainT = 0;
 function draw() {
   drawBasemap(ctx, LEVEL1, g.t);
   for (const e of g.events) if (e.type === 'FLOOD') {
@@ -101,13 +103,11 @@ function draw() {
   for (const l of g.lines) {
     const S = l.stops.map(id => stationById(g, id)!), t = l.train;
     const a = S[t.seg], b = S[Math.min(t.seg + 1, S.length - 1)];
-    const cars = t.capacity / CONFIG.carriageCapacity, len = 28 + (cars - 1) * 16;
+    const cars = t.capacity / CONFIG.carriageCapacity;
     const at = pointAt(route(a, b), t.f);
-    ctx.save(); ctx.translate(at.x, at.y); ctx.rotate(at.angle);
-    ctx.fillStyle = lineColor(l.id); ctx.fillRect(-len / 2, -8, len, 16);
-    t.cargo.forEach((c, k) => shape(-len / 2 + 5 + (k % (3 * cars)) * 9 * (len / (27 * cars)) , -3.5 + Math.floor(k / (3 * cars)) * 7, c, 2.6, P.white));
-    ctx.restore();
+    drawTrain(ctx, at.x, at.y, smoothAngle(l.id, at.angle, g.t - lastTrainT), lineColor(l.id), cars, t.cargo);
   }
+  lastTrainT = g.t;
   for (const s of g.stations) {
     const off = stationFlooded(g, s);
     if (s.rush) { ctx.globalAlpha = 0.25 + 0.15 * Math.sin(g.t * 8); ctx.fillStyle = P.rush; circle(s.x, s.y, 26); ctx.fill(); ctx.globalAlpha = 1; }
