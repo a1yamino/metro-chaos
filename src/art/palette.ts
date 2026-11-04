@@ -20,5 +20,17 @@ export const PALETTE = {
   parkDot: '#b5d3a3',
   hill: '#e2d7c0',
   hillLine: '#cdbf9f',
+  road: '#fdfcf9',      // 大路
+  roofs: ['#ebe6db', '#e6e0d3', '#e1dacb'], // 屋顶高低三档
+  roofShadow: '#ddd6c8',
+  tree: '#b2d19f',
+  treeDark: '#9fc48a',
+  hillShade: '#d9cbb0',
+  pier: '#d8cdb8',
+  foam: '#ffffff',
+  boat: '#8a7a66',
+  label: '#b4ab9b',
+  night: '#1e2a5a',
+  lamp: '#ffd98a',
   overlay: 'rgba(34,34,34,0.6)',
 } as const;
