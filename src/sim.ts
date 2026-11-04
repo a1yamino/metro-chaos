@@ -12,7 +12,8 @@ export interface Train { seg: number; f: number; dir: 1 | -1; cargo: Shape[]; ca
 export interface Line { id: number; stops: number[]; train: Train }
 export type GameEvent =
   | { type: 'FLOOD'; x: number; y: number; r: number; left: number }
-  | { type: 'RELOCATE'; stationId: number; left: number }
+  /** tx/ty：抽预警时定好的目标点，startEvent 原样使用；触发时失效则取消搬迁（见 startEvent） */
+  | { type: 'RELOCATE'; stationId: number; tx: number; ty: number; left: number }
   | { type: 'RUSH'; stationId: number; left: number };
 export type Status = 'playing' | 'lost';
 export type SimSignal = 'deliver' | 'warning' | 'eventStart' | 'lost' | 'upgradeOffer' | 'upgradeTaken' | 'needCrossing';
@@ -54,10 +55,14 @@ export function stationSpotOk(cfg: Config, x: number, y: number): boolean {
   return ![[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]].some(([dx, dy]) => isWater({ x: x + dx, y: y + dy }));
 }
 
+function spotFree(g: Game, x: number, y: number, ignore?: Station): boolean {
+  return stationSpotOk(g.cfg, x, y) && !pointFlooded(g, x, y)
+    && g.stations.every(s => s === ignore || dist(s.x, s.y, x, y) > g.cfg.minStationGap);
+}
+
 function freeSpot(g: Game, ignore?: Station): { x: number; y: number } | null {
-  const { width: W, height: H, minStationGap, stationEdgeMargin: m } = g.cfg;
-  const ok = (x: number, y: number) => stationSpotOk(g.cfg, x, y) && !pointFlooded(g, x, y)
-    && g.stations.every(s => s === ignore || dist(s.x, s.y, x, y) > minStationGap);
+  const { width: W, height: H, stationEdgeMargin: m } = g.cfg;
+  const ok = (x: number, y: number) => spotFree(g, x, y, ignore);
   for (let k = 0; k < g.cfg.stationSpawnAttempts; k++) {
     const x = m + g.placeRng() * (W - 2 * m), y = 130 + g.placeRng() * (H - m - 130);
     if (ok(x, y)) return { x, y };
@@ -154,7 +159,7 @@ function pickEvent(g: Game): GameEvent {
   const type = types[Math.floor(g.rng() * types.length)];
   const any = g.stations[Math.floor(g.rng() * g.stations.length)];
   if (type === 'FLOOD') return { type, x: any.x + range(g, -30, 30), y: any.y + range(g, -30, 30), r: flood.radius, left: flood.duration };
-  if (type === 'RELOCATE') return { type, stationId: any.id, left: 0 };
+  if (type === 'RELOCATE') { const p = freeSpot(g, any) ?? { x: any.tx, y: any.ty }; return { type, stationId: any.id, tx: p.x, ty: p.y, left: 0 }; }
   return { type, stationId: calm[Math.floor(g.rng() * calm.length)].id, left: rush.duration };
 }
 
@@ -163,8 +168,9 @@ function startEvent(g: Game, e: GameEvent) {
   g.signals.push('eventStart');
   if (e.type === 'RELOCATE') {
     const s = stationById(g, e.stationId);
-    const p = s && freeSpot(g, s);
-    if (s && p) { s.tx = p.x; s.ty = p.y; }
+    if (!s) return;
+    // 预警期间目标点可能失效（被洪水淹、旁边新开了站）：失效就取消这次搬迁，站点不动；预警照常由 step 清掉。e.tx/ty 永不改写
+    if (spotFree(g, e.tx, e.ty, s)) { s.tx = e.tx; s.ty = e.ty; }
     return;
   }
   if (e.type === 'RUSH') { const s = stationById(g, e.stationId); if (s) s.rush = true; }
