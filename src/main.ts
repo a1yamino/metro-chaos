@@ -1,13 +1,13 @@
 import { drawBasemap } from './art/basemap';
 import { drawCrossing } from './art/crossing';
-import { drawParticles, drawPopRing, stationPose, updateStationFx } from './art/stations';
+import { burstAt, drawParticles, drawPopRing, stationPose, updateStationFx } from './art/stations';
 import { CONFIG } from './config';
 import { LEVEL1 } from './map/level1';
 import { PALETTE as P } from './art/palette';
 import { playBridge, playDeliver, playGameOver, playTunnel, playUpgrade, playWarning, unlockAudio } from './audio/sfx';
 import { pointAt, route, type Route } from './route';
 import { segmentCrossesWater } from './map/level1';
-import { addCarriage, connect, takeUpgrade, type Upgrade, createGame, drainSignals, segKey, segmentFlooded, stationById, stationFlooded, step, type Game, type Shape, type Station } from './sim';
+import { addCarriage, connect, takeUpgrade, type Upgrade, createGame, drainDeliveries, drainSignals, segKey, segmentFlooded, stationById, stationFlooded, step, type Game, type Shape, type Station } from './sim';
 
 const { width: W, height: H } = CONFIG;
 const cv = document.getElementById('c') as HTMLCanvasElement;
@@ -176,7 +176,6 @@ function drawResults() {
 
 function update(dt: number) {
   if (!g.upgradeOffer) step(g, dt); // 选升级时暂停
-  updateStationFx(g, dt);
   for (const s of drainSignals(g)) {
     if (s === 'deliver') playDeliver();
     else if (s === 'warning') playWarning();
@@ -184,6 +183,8 @@ function update(dt: number) {
     else if (s === 'eventStart') flash = 1;
     else if (s === 'lost') { flash = 1; playGameOver(); if (g.delivered > best) { best = g.delivered; newBest = true; localStorage.setItem(BEST_KEY, String(best)); } }
   }
+  for (const d of drainDeliveries(g)) { const s = stationById(g, d.stationId); if (s) burstAt(s, d.n); }
+  updateStationFx(g, dt);
   flash = Math.max(0, flash - dt * 1.5);
   for (const p of pops) { p.y -= 20 * dt; p.a -= dt * 0.8; }
   pops = pops.filter(p => p.a > 0);

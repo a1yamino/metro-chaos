@@ -1,16 +1,18 @@
-/** B7 站点动画：只读 sim 状态，用帧间差分推导事件（新站、送达），不改 sim。 */
+/** B7 站点动画：只读 sim 状态。新站靠帧间差分；送达粒子由 main.ts 读 drainDeliveries 后调 burstAt。 */
 import type { Game } from '../sim';
 import { CONFIG } from '../config';
 import { PALETTE as P } from './palette';
 
 const POP = 0.4, N = 96, PLIFE = 0.6;
 const born = new Map<number, number>(); // 站点 id → 首次看到的时刻
-const cargoPrev = new Map<number, number>(); // 线路 id → 上帧车上人数
-let deliveredPrev = 0, last: Game | null = null;
+let last: Game | null = null;
 // 粒子池：定长 Float32Array 复用，[x, y, vx, vy, age, color]
 const pool = new Float32Array(N * 6).fill(PLIFE + 1);
 let next = 0;
 const COLORS = [...P.lines, P.warning];
+
+/** 送达：在站点冒一簇粒子，人数越多越多 */
+export function burstAt(s: { x: number; y: number }, n: number) { burst(s.x, s.y, 8 + Math.min(8, n) * 2); }
 
 /** 在 (x,y) 冒一簇粒子 */
 export function burst(x: number, y: number, n = 10) {
@@ -21,21 +23,10 @@ export function burst(x: number, y: number, n = 10) {
   }
 }
 
-/** 每帧调用一次：差分出新站和送达 */
+/** 每帧调用一次：差分出新站，推进粒子 */
 export function updateStationFx(g: Game, dt: number) {
-  if (g !== last) { born.clear(); cargoPrev.clear(); deliveredPrev = g.delivered; last = g; }
+  if (g !== last) { born.clear(); last = g; }
   for (const s of g.stations) if (!born.has(s.id)) born.set(s.id, g.t);
-  const gained = g.delivered - deliveredPrev;
-  for (const l of g.lines) {
-    const now = l.train.cargo.length, was = cargoPrev.get(l.id) ?? now;
-    if (gained > 0 && now < was) {
-      const t = l.train, id = l.stops[t.f < 0.5 ? t.seg : Math.min(t.seg + 1, l.stops.length - 1)];
-      const s = g.stations.find((o) => o.id === id);
-      if (s) burst(s.x, s.y, 8 + Math.min(8, was - now) * 2);
-    }
-    cargoPrev.set(l.id, now);
-  }
-  deliveredPrev = g.delivered;
   for (let o = 0; o < N * 6; o += 6) if (pool[o + 4] < PLIFE) {
     pool[o] += pool[o + 2] * dt; pool[o + 1] += pool[o + 3] * dt; pool[o + 3] += 140 * dt; pool[o + 4] += dt;
   }

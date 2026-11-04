@@ -11,6 +11,7 @@ import { PALETTE as P } from '../src/art/palette';
 import { CONFIG } from '../src/config';
 const q = new URLSearchParams(location.search), at = q.has('at') ? +q.get('at') : null;
 let scene = q.get('s') || 'pop';
+const T = +(q.get('t') || 0); // 底图时间：?t=90 为最深夜
 const ctx = document.getElementById('c').getContext('2d');
 const shape = (x, y, sh, r, fill, stroke, lw = 3) => { ctx.beginPath();
   if (sh === 'circle') ctx.arc(x, y, r, 0, 7); else if (sh === 'square') ctx.rect(x - r*.85, y - r*.85, r*1.7, r*1.7);
@@ -30,7 +31,7 @@ function frame(dt) {
   updateStationFx(g, dt);
 }
 function draw() {
-  drawBasemap(ctx, LEVEL1, 0);
+  drawBasemap(ctx, LEVEL1, T);
   ctx.lineCap = 'round'; ctx.strokeStyle = P.lines[0]; ctx.lineWidth = 7; ctx.beginPath(); pos.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
   for (const s of g.stations) {
     const ps = stationPose(s, g.t);
