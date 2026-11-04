@@ -255,7 +255,7 @@ export function step(g: Game, dt: number): void {
   if (g.stations.some(s => s.crowdTime >= c.crowdFailSeconds)) { g.status = 'lost'; g.signals.push('lost'); }
 }
 
-/** 取出并清空本帧信号（给音效/特效用）。 */
 /** 取走并清空本帧累积的送达事件（按发生顺序）。 */
 export function drainDeliveries(g: Game): Delivered[] { const d = g.deliveries; g.deliveries = []; return d; }
+/** 取出并清空本帧信号（给音效/特效用）。 */
 export function drainSignals(g: Game): SimSignal[] { const s = g.signals; g.signals = []; return s; }
