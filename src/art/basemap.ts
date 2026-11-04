@@ -28,6 +28,8 @@ function buildStatic(map: LevelMap, dpr: number) {
   const lamps: Pt[] = [];
   c.fillStyle = P.street; c.fillRect(0, 0, W, H);
   const busy = (p: Pt) => isWater(p) || map.parks.some((pk) => pointInPolygon(p, pk)) || map.hills.some((h) => pointInPolygon(p, h));
+  // 装饰只落在干地上：不在水里、离河岸留余量、不进海
+  const dry = (p: Pt) => !busy(p) && distToRiver(p) > map.river.width / 2 + 4 && !pointInPolygon(p, map.sea);
   // 街区：大路每 4 格一条（更宽），其余是小巷；街区内切成 1~3 块屋顶，高度不同带落影
   for (let y = 0; y < H; y += G) for (let x = 0; x < W; x += G) {
     if (busy({ x: x + G / 2, y: y + G / 2 }) || hash(x, y) < 0.06) continue;
@@ -36,17 +38,19 @@ function buildStatic(map: LevelMap, dpr: number) {
     for (let i = 0; i < n; i++) {
       const lx = split ? l + ((r - l) * i) / n : l, ly = split ? t : t + ((b - t) * i) / n;
       const lw = split ? (r - l) / n - 1.5 : r - l, lh = split ? b - t : (b - t) / n - 1.5;
+      if (![[lx, ly], [lx + lw, ly], [lx, ly + lh], [lx + lw, ly + lh], [lx + lw / 2, ly + lh / 2]].every(([px, py]) => dry({ x: px, y: py }))) continue;
       const lv = Math.floor(hash(lx, ly) * 3), sh = 0.8 + lv * 0.9;
       c.fillStyle = P.roofShadow; c.fillRect(lx + sh, ly + sh, lw, lh);
       c.fillStyle = P.roofs[lv]; c.fillRect(lx, ly, lw, lh);
-      if (hash(ly, lx) < 0.45) lamps.push({ x: lx + 3 + hash(lx, 1) * (lw - 6), y: ly + 3 + hash(ly, 2) * (lh - 6) });
+      const lp = { x: lx + 3 + hash(lx, 1) * (lw - 6), y: ly + 3 + hash(ly, 2) * (lh - 6) };
+      if (hash(ly, lx) < 0.45 && dry(lp)) lamps.push(lp);
     }
   }
   // 大路浅色路面 + 路灯
   c.fillStyle = P.road;
   for (let x = 0; x < W; x += G * 4) c.fillRect(x - 3, 0, 7, H);
   for (let y = 0; y < H; y += G * 4) c.fillRect(0, y - 3, W, 7);
-  for (let x = 0; x < W; x += G * 4) for (let y = 17; y < H; y += G) if (!busy({ x, y }) && distToRiver({ x, y }) > map.river.width && !pointInPolygon({ x, y: y + 12 }, map.sea)) lamps.push({ x, y });
+  for (let x = 0; x < W; x += G * 4) for (let y = 17; y < H; y += G) if (dry({ x, y }) && distToRiver({ x, y }) > map.river.width && !pointInPolygon({ x, y: y + 12 }, map.sea)) lamps.push({ x, y });
   // 丘陵：由外到内逐层加深的等高线阴影（偏东南，像受西北光）
   for (const hl of map.hills) {
     const o = centroid(hl);
@@ -81,7 +85,7 @@ function buildStatic(map: LevelMap, dpr: number) {
   }
   // 地名：淡色小字，放在角落空地
   c.fillStyle = P.label; c.font = '600 9px system-ui, sans-serif'; c.textAlign = 'center';
-  for (const [s, x, y] of [['河 港 城', 70, 40], ['西 岸 公 园', 75, 488], ['东 山', 330, 680], ['南 港', 300, 800], ['北 门', 330, 120]] as const) c.fillText(s, x, y);
+  for (const [s, x, y] of [['河 港 城', 70, 40], ['西 岸 公 园', 75, 488], ['东 山', 330, 680], ['南 港', 300, 712], ['北 门', 330, 120]] as const) c.fillText(s, x, y);
   return { cv, lamps };
 }
 
