@@ -63,14 +63,17 @@ function shapePath(ctx: CanvasRenderingContext2D, x: number, y: number, sh: Shap
   else { ctx.moveTo(x, y - r * 1.1); ctx.lineTo(x + r, y + r * 0.75); ctx.lineTo(x - r, y + r * 0.75); ctx.closePath(); }
 }
 
-/** 淡虚线箭头 a→b，箭头停在目标残影外 */
+/** 虚线箭头 a→b，箭头停在目标残影外。B10：底下垫一道预警黄宽边，上面压深色墨线虚线，浅底和夜色上都看得清 */
 function arrow(ctx: CanvasRenderingContext2D, ax: number, ay: number, bx: number, by: number, alpha: number) {
   const L = Math.hypot(bx - ax, by - ay); if (L < 50) return;
   const ux = (bx - ax) / L, uy = (by - ay) / L, sx = ax + ux * 30, sy = ay + uy * 30, ex = bx - ux * 28, ey = by - uy * 28;
-  ctx.globalAlpha = alpha; ctx.strokeStyle = P.warning; ctx.lineWidth = 2; ctx.setLineDash([5, 6]);
-  ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke(); ctx.setLineDash([]);
-  ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex - ux * 8 - uy * 6, ey - uy * 8 + ux * 6); ctx.moveTo(ex, ey); ctx.lineTo(ex - ux * 8 + uy * 6, ey - uy * 8 - ux * 6); ctx.stroke();
-  ctx.globalAlpha = 1;
+  const head = () => { ctx.beginPath(); ctx.moveTo(ex - ux * 10 - uy * 7, ey - uy * 10 + ux * 7); ctx.lineTo(ex, ey); ctx.lineTo(ex - ux * 10 + uy * 7, ey - uy * 10 - ux * 7); ctx.stroke(); };
+  ctx.save(); ctx.lineCap = ctx.lineJoin = 'round'; ctx.globalAlpha = alpha;
+  for (const [col, lw] of [[P.warning, 5.5], [P.ink, 3]] as const) {
+    ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.setLineDash([7, 6]);
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke(); ctx.setLineDash([]); head();
+  }
+  ctx.restore();
 }
 
 /** 倒计时环：剩余预警时间占满一圈的比例 */
@@ -116,7 +119,7 @@ export function drawMutationsOver(ctx: CanvasRenderingContext2D, g: MutView) {
       ctx.globalAlpha = 0.25 * pulse; ctx.fillStyle = c; circ(ctx, s.x, s.y, 30); ctx.fill(); ctx.globalAlpha = 1;
       countdown(ctx, s.x, s.y, 27, g.eventTimer, c);
       if (w.type === 'RELOCATE') { // 新位置的虚线残影 + 倒计时环，站点到目标拖一条淡虚线箭头
-        arrow(ctx, s.x, s.y, w.tx, w.ty, 0.45);
+        arrow(ctx, s.x, s.y, w.tx, w.ty, 0.9);
         ctx.globalAlpha = 0.6 + 0.4 * pulse; ctx.fillStyle = P.white; ctx.strokeStyle = P.warning; ctx.lineWidth = 2.5; ctx.setLineDash([5, 4]);
         shapePath(ctx, w.tx, w.ty, s.shape, CONFIG.stationRadius); ctx.globalAlpha *= 0.5; ctx.fill(); ctx.globalAlpha = 0.6 + 0.4 * pulse; ctx.stroke();
         ctx.setLineDash([]); ctx.globalAlpha = 1;

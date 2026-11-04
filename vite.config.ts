@@ -11,6 +11,7 @@ export default defineConfig({
         stations: resolve(import.meta.dirname, 'demo/stations.html'),
         trains: resolve(import.meta.dirname, 'demo/trains.html'),
         mutations: resolve(import.meta.dirname, 'demo/mutations.html'),
+        labels: resolve(import.meta.dirname, 'demo/labels.html'),
       },
     },
   },
