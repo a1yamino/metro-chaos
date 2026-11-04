@@ -1,0 +1,34 @@
+<!doctype html><meta charset="utf-8"><title>B8 胶囊车厢 演示</title>
+<style>body{margin:0;background:#f4f1ea}</style>
+<canvas id="c" width="390" height="844"></canvas>
+<script type="module">
+// 仅演示页：?t=秒 定底图时间（90 为最深夜），?at=秒 定格车厢位置（截图用），不带 at 则循环播放
+import { drawBasemap } from '../src/art/basemap';
+import { drawTrain, smoothAngle } from '../src/art/trains';
+import { LEVEL1 } from '../src/map/level1';
+import { PALETTE as P } from '../src/art/palette';
+import { route, pointAt, routeLength } from '../src/route';
+const q = new URLSearchParams(location.search), T = +(q.get('t') || 0), at = q.has('at') ? +q.get('at') : null;
+const ctx = document.getElementById('c').getContext('2d');
+const SH = ['circle', 'triangle', 'square'];
+const L = [
+  { a: { x: 60, y: 200 }, b: { x: 330, y: 330 }, cars: 1, n: 4 },
+  { a: { x: 330, y: 420 }, b: { x: 70, y: 520 }, cars: 2, n: 9 },
+  { a: { x: 80, y: 600 }, b: { x: 320, y: 760 }, cars: 3, n: 16 },
+].map((l, i) => ({ ...l, r: route(l.a, l.b), c: P.lines[i], cargo: Array.from({ length: l.n }, (_, k) => SH[(k + i) % 3]) }));
+let last = 0;
+function draw(t) {
+  drawBasemap(ctx, LEVEL1, T);
+  ctx.lineCap = ctx.lineJoin = 'round';
+  L.forEach((l, i) => {
+    ctx.strokeStyle = l.c; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(l.a.x, l.a.y);
+    const lg = l.r.legs; for (const g of lg) ctx.lineTo(g.b.x, g.b.y); ctx.stroke();
+    const ph = (t * 90 / routeLength(l.r) + i * 0.3) % 2, f = ph > 1 ? 2 - ph : ph;
+    const p = pointAt(l.r, f);
+    drawTrain(ctx, p.x, p.y, smoothAngle(i, p.angle, t - last), l.c, l.cars, l.cargo);
+  });
+  last = t;
+}
+if (at !== null) { for (let s = 0; s < at; s += 1 / 60) draw(s); draw(at); }
+else { const t0 = performance.now(); const loop = now => { draw((now - t0) / 1000); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
+</script>

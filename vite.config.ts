@@ -9,6 +9,7 @@ export default defineConfig({
         main: resolve(import.meta.dirname, 'index.html'),
         crossings: resolve(import.meta.dirname, 'demo/crossings.html'),
         stations: resolve(import.meta.dirname, 'demo/stations.html'),
+        trains: resolve(import.meta.dirname, 'demo/trains.html'),
       },
     },
   },
