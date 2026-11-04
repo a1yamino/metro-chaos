@@ -1,0 +1,53 @@
+<!doctype html><meta charset="utf-8"><title>B9 突变演出 演示</title>
+<style>body{margin:0;background:#f4f1ea}#b{position:fixed;bottom:8px;left:8px;display:flex;gap:6px}button{padding:8px 12px}</style>
+<div id="b"><button data-m="flood">涨水</button><button data-m="relocate">搬迁</button><button data-m="rush">暴增</button></div>
+<canvas id="c" width="390" height="844"></canvas>
+<script type="module">
+// 仅演示页：?m=flood|relocate|rush 选突变，?phase=warn|play 选预警或过场，?at=秒 定格（warn 从预警开始计，play 从突变发生计），?t=秒 底图时间（90 为最深夜）
+// 演示页自己造一个假的只读视图，不跑 sim；站点滑动按 sim 同样的插值写
+import { drawBasemap } from '../src/art/basemap';
+import { drawMutationsOver, drawMutationsUnder, updateMutationFx } from '../src/art/mutations';
+import { LEVEL1 } from '../src/map/level1';
+import { PALETTE as P } from '../src/art/palette';
+import { CONFIG } from '../src/config';
+const q = new URLSearchParams(location.search), at = q.has('at') ? +q.get('at') : null;
+let m = q.get('m') || 'flood'; const phase = q.get('phase') || 'warn', T = +(q.get('t') || 0);
+const ctx = document.getElementById('c').getContext('2d');
+const shape = (x, y, sh, r, fill, stroke, lw = 3) => { ctx.beginPath();
+  if (sh === 'circle') ctx.arc(x, y, r, 0, 7); else if (sh === 'square') ctx.rect(x - r*.85, y - r*.85, r*1.7, r*1.7);
+  else { ctx.moveTo(x, y - r*1.1); ctx.lineTo(x + r, y + r*.75); ctx.lineTo(x - r, y + r*.75); ctx.closePath(); }
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke(); } };
+const SH = ['circle', 'triangle', 'square'], pos = [[80, 300], [300, 420], [90, 600]];
+let g, ev, startAt;
+function reset() {
+  g = { t: 0, events: [], warning: null, eventTimer: 99, stations: pos.map(([x, y], i) => ({ id: i + 1, x, y, tx: x, ty: y, shape: SH[i], queue: [], rush: false })) };
+  ev = m === 'flood' ? { type: 'FLOOD', x: 115, y: 575, r: CONFIG.flood.radius, left: CONFIG.flood.duration }
+    : { type: m === 'rush' ? 'RUSH' : 'RELOCATE', stationId: 2, left: m === 'rush' ? CONFIG.rush.duration : 0 };
+  g.warning = ev; g.eventTimer = CONFIG.eventWarning;
+  startAt = phase === 'play' || at === null ? CONFIG.eventWarning : Infinity; // play：先走完 5 秒预警再发生
+}
+function frame(dt) {
+  g.t += dt; g.eventTimer -= dt;
+  for (const s of g.stations) { const k = Math.min(1, dt * 4); s.x += (s.tx - s.x) * k; s.y += (s.ty - s.y) * k; }
+  if (g.warning && g.t >= startAt) {
+    if (ev.type === 'RELOCATE') { const s = g.stations[1]; s.tx = 300; s.ty = 250; } else g.events.push(ev);
+    if (ev.type === 'RUSH') g.stations[1].rush = true;
+    g.warning = null;
+  }
+  updateMutationFx(g, dt);
+}
+function draw() {
+  drawBasemap(ctx, LEVEL1, T);
+  drawMutationsUnder(ctx, g);
+  ctx.lineCap = 'round'; ctx.strokeStyle = P.lines[1]; ctx.lineWidth = 7; ctx.beginPath(); g.stations.forEach((s, i) => i ? ctx.lineTo(s.x, s.y) : ctx.moveTo(s.x, s.y)); ctx.stroke();
+  drawMutationsOver(ctx, g);
+  for (const s of g.stations) {
+    if (s.rush) { ctx.globalAlpha = 0.25 + 0.15 * Math.sin(g.t * 8); ctx.fillStyle = P.rush; ctx.beginPath(); ctx.arc(s.x, s.y, 26, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
+    shape(s.x, s.y, s.shape, CONFIG.stationRadius, P.white, P.ink);
+  }
+}
+function run(until) { reset(); const end = (phase === 'play' ? CONFIG.eventWarning : 0) + until; while (g.t < end - 1e-6) frame(Math.min(1 / 60, end - g.t)); draw(); }
+document.querySelectorAll('button').forEach(b => b.onclick = () => { m = b.dataset.m; reset(); });
+if (at !== null) run(at);
+else { reset(); let last = performance.now(); const loop = now => { frame(Math.min(0.05, (now - last) / 1000)); last = now; if (g.t > CONFIG.eventWarning + 3) reset(); draw(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
+</script>

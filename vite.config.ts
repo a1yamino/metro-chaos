@@ -10,6 +10,7 @@ export default defineConfig({
         crossings: resolve(import.meta.dirname, 'demo/crossings.html'),
         stations: resolve(import.meta.dirname, 'demo/stations.html'),
         trains: resolve(import.meta.dirname, 'demo/trains.html'),
+        mutations: resolve(import.meta.dirname, 'demo/mutations.html'),
       },
     },
   },
